@@ -8,24 +8,97 @@
 
 import sys
 import argparse
+import subprocess
+
+
+map actions = {(SNAPSHOT, "<snapshot>")}
+
+
+class DatabaseRecord {
+    def DatabaseRecord(self, timestamp, action, mainline, branch, path, version):
+        self.timestamp = timestamp
+        self.action = action
+        self.mainline = mainline
+        self.branch = branch
+        self.path = path
+        self.version = version
+}
 
 
 def print_usage():
-    sys.stderr.output()
+    sys.stderr.output("Usage")
     # TODO
+
+
+def find_all_branches_in_mainline_containing_path(mainline, path):
+    # TODO
+    return ("One", "Two")
+
+
+def find_all_files_in_branch_under_path(mainline, branch, path):
+    # TODO
+    return ("One", "Two")
+
+
+def find_all_file_versions(mainline, branch, path):
+    # TODO
+    return ((1, "timestamp1"), (2, "timestamp2"))
+
+
+def find_all_child_snapshots(mainline, branch):
+    # TODO
+
+
+def add_record_to_database(record):
+    # TODO
+
+
+def get_next_database_record():
+    # TODO
+    return record
+
+
+def cmd_parse(mainline, path):
+    branches = find_all_branches_in_mainline_containing_path(mainline, path)
+    for branch in branches:
+        files = find_all_files_in_branch_under_path(mainline, branch, path)
+        for file in files:
+            versions = find_all_file_versions(mainline, branch, path+file)
+            for version in versions:
+                add_record_to_database(DatabaseRecord(timestamp, action, mainline, branch, path+file, version))
+    snapshots = find_all_child_snapshots(mainline, branch)
+    for snapshot in snapshots:
+        add_record_to_database(DatabaseRecord(timestamp, actions[SNAPSHOT], mainline, branch, None, None))
+
+
+def process_database_record(record):
+    if record.action == actions[SNAPSHOT]:
+        # TODO
+    else
+        raise Exception("Unknown record action")
+
+
+def cmd_export(database):
+    record = get_next_database_record(database)
+    while (record):
+        process_database_record(record)
+        record = get_next_database_record(database)
 
 
 def handle_command(args, opts):
     command = args[0]
 
     if command == "parse":
-        return cmd_parse()
+        database = create_database()
+        cmd_parse(database)
     elif command == "export":
-        return cmd_export()
+        database = # TODO
+        cmd_export(database)
     elif command == "all":
-        # TODO is this the right logic
-        return cmd_parse() or cmd_export()
-    else
+        database = create_database()
+        cmd_parse(database)
+        cmd_export(database)
+    else:
         print_usage()
         raise Exception("Unknown command")
 
@@ -83,4 +156,4 @@ Steps:
         * For snapshot
             * Use git fast-import 'tag' command with 'deleteall' and "Tag Fixup Branches"
     * Integrity check:  Verify Git tags are identical to Surround snapshots
-
+'''
