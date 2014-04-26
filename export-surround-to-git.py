@@ -4,10 +4,30 @@
 # TODO:  standard format for headers?
 # Author:  Jonathan Elchison <JElchison@Gmail.com>
 # License:  TODO
-# Environment:  Assumes running in Bash
+# Environment:  Assumes running in Bash version TODO.  Assumes sscm client version TODO.
 
 import sys
 import argparse
+
+
+def print_usage():
+    sys.stderr.output()
+    # TODO
+
+
+def handle_command(args, opts):
+    command = args[0]
+
+    if command == "parse":
+        return cmd_parse()
+    elif command == "export":
+        return cmd_export()
+    elif command == "all":
+        # TODO is this the right logic
+        return cmd_parse() or cmd_export()
+    else
+        print_usage()
+        raise Exception("Unknown command")
 
 
 def parse_arguments():
@@ -15,15 +35,14 @@ def parse_arguments():
     pass
 
 
-def handle_command():
-    # TODO
-    pass
-
-
 def main():
-    parse_arguments()
-    handle_command()
-    sys.exit(0)
+    try:
+        args, opts = parse_arguments(sys.argv)
+        handle_command(args, opts)
+        sys.exit(0)
+    except Exception as e:
+        sys.stderr.output(e)
+        sys.exit(1)
 
 
 if __main__ == "export-surround-to-git.py":
