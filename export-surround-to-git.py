@@ -10,6 +10,9 @@ import sys
 import argparse
 import subprocess
 
+# TODO pep8
+# TODO pylint
+
 
 map actions = {(SNAPSHOT, "<snapshot>")}
 
