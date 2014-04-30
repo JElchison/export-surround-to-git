@@ -81,12 +81,12 @@ def find_all_file_versions(mainline, branch, path):
     return (("timestamp1", "action1", 1, None), ("timestamp2", "addtobranch", 2, "childbranch"))
 
 
-def add_record_to_database(record):
+def add_record_to_database(record, database):
     # TODO
     # TODO: ensure no duplicate records in database
 
 
-def get_next_database_record():
+def get_next_database_record(database):
     # TODO
     return record
 
