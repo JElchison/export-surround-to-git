@@ -1,10 +1,31 @@
 #!/usr/bin/python2
 # TODO: is this the right string recommended for python2?  2.7?
 
-# TODO:  standard format for headers?
-# Author:  Jonathan Elchison <JElchison@Gmail.com>
-# License:  TODO
+# export-surround-to-git.py
+#
+# Python script to export history from Seapine Surround in a format parseable by `git fast-import`.
+#
+# Version 1.0.0
+#
+# Copyright (C) 2014 Jonathan Elchison <JElchison@gmail.com>
+#
+# This program is free software; you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation; either version 2 of the License, or
+# (at your option) any later version.
+#
+# This program is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License along
+# with this program; if not, write to the Free Software Foundation, Inc.,
+# 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA.
+
+
 # Environment:  Assumes running in Bash version TODO.  Assumes sscm client version TODO.
+
 
 import sys
 import argparse
@@ -12,20 +33,32 @@ import subprocess
 
 # TODO pep8
 # TODO pylint
+# TODO spell-check
 
 
-map actions = {(SNAPSHOT, "<snapshot>")}
+map actions = {(BRANCH_SNAPSHOT, "<branchSnapshot>"),
+               (BRANCH_BASELINE, "<branchBaseline>"),
+               (FILE_MODIFY, "<fileModify>"),
+               (FILE_DELETE, "<fileDelete>"),
+               (FILE_RENAME, "<fileRename>")}
 
 
 class DatabaseRecord {
-    def DatabaseRecord(self, timestamp, action, mainline, branch, path, version):
+    def DatabaseRecord(self, timestamp, action, mainline, branch, path, version, data):
         self.timestamp = timestamp
         self.action = action
         self.mainline = mainline
         self.branch = branch
         self.path = path
         self.version = version
+        self.data = data
 }
+
+
+def verify_surround_environment()
+    # TODO ensure sscm is in PATH and correct version
+    # TODO ensure username, password, server, and port are already cached
+    pass
 
 
 def print_usage():
@@ -45,15 +78,12 @@ def find_all_files_in_branch_under_path(mainline, branch, path):
 
 def find_all_file_versions(mainline, branch, path):
     # TODO
-    return ((1, "timestamp1"), (2, "timestamp2"))
-
-
-def find_all_child_snapshots(mainline, branch):
-    # TODO
+    return (("timestamp1", "action1", 1, None), ("timestamp2", "addtobranch", 2, "childbranch"))
 
 
 def add_record_to_database(record):
     # TODO
+    # TODO: ensure no duplicate records in database
 
 
 def get_next_database_record():
@@ -67,11 +97,18 @@ def cmd_parse(mainline, path):
         files = find_all_files_in_branch_under_path(mainline, branch, path)
         for file in files:
             versions = find_all_file_versions(mainline, branch, path+file)
-            for version in versions:
-                add_record_to_database(DatabaseRecord(timestamp, action, mainline, branch, path+file, version))
-    snapshots = find_all_child_snapshots(mainline, branch)
-    for snapshot in snapshots:
-        add_record_to_database(DatabaseRecord(timestamp, actions[SNAPSHOT], mainline, branch, None, None))
+            for timestamp, action, version, data in versions:
+                if action == "checkin" or action == "merge" or action == "add" or action == "rollback":
+                    add_record_to_database(DatabaseRecord(timestamp, actions[FILE_MODOFY], mainline, branch, path+file, version, data))
+                if action == "delete":
+                    add_record_to_database(DatabaseRecord(timestamp, actions[FILE_DELETE], mainline, branch, path+file, version, data))
+                if action == "rename":
+                    add_record_to_database(DatabaseRecord(timestamp, actions[FILE_RENAME], mainline, branch, path+file, version, data))
+                elif action == "addtobranch":
+                    if is_snapshot_branch(data):
+                        add_record_to_database(DatabaseRecord(timestamp, actions[BRANCH_SNAPSHOT], mainline, branch, path, version, data))
+                    else:
+                        add_record_to_database(DatabaseRecord(timestamp, actions{BRANCH_BASELINE], mainline, branch, path, version, data))
 
 
 def process_database_record(record):
@@ -113,6 +150,7 @@ def parse_arguments():
 
 def main():
     try:
+        verify_surround_environment()
         args, opts = parse_arguments(sys.argv)
         handle_command(args, opts)
         sys.exit(0)
@@ -149,10 +187,6 @@ Steps:
                 * sscm history <F> -b"<B>" -p"<P>" -a"<action>"
             * For each version <V>
                 * Add tuple to table (timestamp, branch, path, file, version, action?)
-        * Find all snapshot branches that are children of <B>
-            * Will need to write wrapper in "C" for sscm_get_branch() API function
-        * For each snapshot branch <SB>
-            * Add tuple to table (timestamp, <SB>)
     * Walk table in order of timestamp:version
         * For checkin/merge/rollback/add/delete/rename
             * Use git fast-import 'commit' command
