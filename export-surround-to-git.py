@@ -36,14 +36,15 @@ import subprocess
 # TODO spell-check
 
 
-map actions = {(BRANCH_SNAPSHOT, "<branchSnapshot>"),
-               (BRANCH_BASELINE, "<branchBaseline>"),
-               (FILE_MODIFY, "<fileModify>"),
-               (FILE_DELETE, "<fileDelete>"),
-               (FILE_RENAME, "<fileRename>")}
+class Actions:
+    BRANCH_SNAPSHOT = 1
+    BRANCH_BASELINE = 2
+    FILE_MODIFY = 3
+    FILE_DELETE = 4
+    FILE_RENAME = 5
 
 
-class DatabaseRecord {
+class DatabaseRecord:
     def DatabaseRecord(self, timestamp, action, mainline, branch, path, version, data):
         self.timestamp = timestamp
         self.action = action
@@ -52,17 +53,16 @@ class DatabaseRecord {
         self.path = path
         self.version = version
         self.data = data
-}
 
 
-def verify_surround_environment()
+def verify_surround_environment():
     # TODO ensure sscm is in PATH and correct version
     # TODO ensure username, password, server, and port are already cached
     pass
 
 
 def print_usage():
-    sys.stderr.output("Usage")
+    sys.stderr.write("Usage")
     # TODO
 
 
@@ -84,6 +84,7 @@ def find_all_file_versions(mainline, branch, path):
 def add_record_to_database(record, database):
     # TODO
     # TODO: ensure no duplicate records in database
+    pass
 
 
 def get_next_database_record(database):
@@ -99,22 +100,23 @@ def cmd_parse(mainline, path):
             versions = find_all_file_versions(mainline, branch, path+file)
             for timestamp, action, version, data in versions:
                 if action == "checkin" or action == "merge" or action == "add" or action == "rollback":
-                    add_record_to_database(DatabaseRecord(timestamp, actions[FILE_MODOFY], mainline, branch, path+file, version, data))
+                    add_record_to_database(DatabaseRecord(timestamp, Actions.FILE_MODOFY, mainline, branch, path+file, version, data))
                 if action == "delete":
-                    add_record_to_database(DatabaseRecord(timestamp, actions[FILE_DELETE], mainline, branch, path+file, version, data))
+                    add_record_to_database(DatabaseRecord(timestamp, Actions.FILE_DELETE, mainline, branch, path+file, version, data))
                 if action == "rename":
-                    add_record_to_database(DatabaseRecord(timestamp, actions[FILE_RENAME], mainline, branch, path+file, version, data))
+                    add_record_to_database(DatabaseRecord(timestamp, Actions.FILE_RENAME, mainline, branch, path+file, version, data))
                 elif action == "addtobranch":
                     if is_snapshot_branch(data):
-                        add_record_to_database(DatabaseRecord(timestamp, actions[BRANCH_SNAPSHOT], mainline, branch, path, version, data))
+                        add_record_to_database(DatabaseRecord(timestamp, Actions.BRANCH_SNAPSHOT, mainline, branch, path, version, data))
                     else:
-                        add_record_to_database(DatabaseRecord(timestamp, actions{BRANCH_BASELINE], mainline, branch, path, version, data))
+                        add_record_to_database(DatabaseRecord(timestamp, Actions.BRANCH_BASELINE, mainline, branch, path, version, data))
 
 
 def process_database_record(record):
     if record.action == actions[SNAPSHOT]:
         # TODO
-    else
+        pass
+    else:
         raise Exception("Unknown record action")
 
 
@@ -132,7 +134,7 @@ def handle_command(args, opts):
         database = create_database()
         cmd_parse(database)
     elif command == "export":
-        database = # TODO
+        database = True  # TODO
         cmd_export(database)
     elif command == "all":
         database = create_database()
@@ -149,17 +151,13 @@ def parse_arguments():
 
 
 def main():
-    try:
-        verify_surround_environment()
-        args, opts = parse_arguments(sys.argv)
-        handle_command(args, opts)
-        sys.exit(0)
-    except Exception as e:
-        sys.stderr.output(e)
-        sys.exit(1)
+    verify_surround_environment()
+    args, opts = parse_arguments(sys.argv)
+    handle_command(args, opts)
+    sys.exit(0)
 
 
-if __main__ == "export-surround-to-git.py":
+if __name__ == "__main__":
     main()
 
 
