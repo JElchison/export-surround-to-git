@@ -1,5 +1,4 @@
-#!/usr/bin/python2
-# TODO: is this the right string recommended for python2?  2.7?
+#!/usr/bin/env python
 
 # export-surround-to-git.py
 #
@@ -36,6 +35,7 @@ import sqlite3
 # TODO pep8
 # TODO pylint
 # TODO spell-check
+# TODO test with python3
 
 
 class Actions:
@@ -55,6 +55,9 @@ class DatabaseRecord:
         self.path = path
         self.version = version
         self.data = data
+
+    def GetTuple():
+        return (self.timestamp, self.action, self.mainline, self.branch, self.path, self.version, self.data)
 
 
 def verify_surround_environment():
@@ -98,7 +101,7 @@ def create_database():
 
 def add_record_to_database(record, database):
     c = database.cursor()
-    c.execute('''INSERT INTO operations VALUES (?, ?, ?, ?, ?, ?, ?)''', (record.timestamp, record.action, record.mainline, record.branch, record.path, record.version, record.data))
+    c.execute('''INSERT INTO operations VALUES (?, ?, ?, ?, ?, ?, ?)''', record.GetTuple())
     database.commit()
 
 
