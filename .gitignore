@@ -98,3 +98,11 @@ coverage.xml
 
 # Sphinx documentation
 docs/_build/
+
+
+#########################
+# export-surround-to-git
+#########################
+
+# sqlite databases
+*.db
