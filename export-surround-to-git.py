@@ -93,7 +93,7 @@ def create_database():
     c = database.cursor()
     c.execute('''CREATE TABLE operations (timestamp INTEGER NOT NULL, action TEXT NOT NULL, mainline TEXT NOT NULL, branch TEXT NOT NULL, path TEXT, version INTEGER, data TEXT, PRIMARY KEY(action, mainline, branch, path, version, data))''')
     database.commit()
-    return conn
+    return database 
 
 
 def add_record_to_database(record, database):
@@ -165,9 +165,9 @@ def handle_command(parser):
 
 def parse_arguments():
     parser = argparse.ArgumentParser(prog='export-surround-to-git.py', description='Exports history from Seapine Surround in a format parseable by `git fast-import`.')
-    parser.add_argument('-m', '--mainline', nargs=1, description='Mainline branch containing history to export')
-    parser.add_argument('-p', '--path', nargs=1, description='Path containing history to export')
-    parser.add_argument('-d', '--database', nargs=1, description='Path to local database to resume an export')
+    parser.add_argument('-m', '--mainline', nargs=1, help='Mainline branch containing history to export')
+    parser.add_argument('-p', '--path', nargs=1, help='Path containing history to export')
+    parser.add_argument('-d', '--database', nargs=1, help='Path to local database to resume an export')
     parser.add_argument('--version', action='version', version='%(prog)s '+VERSION)
     parser.add_argument('command', nargs='?', default='all')
     return parser
