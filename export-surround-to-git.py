@@ -107,7 +107,7 @@ def cmd_parse(mainline, path):
 
 
 def process_database_record(record):
-    if record.action == actions[SNAPSHOT]:
+    if record.action == Actions.BRANCH_SNAPSHOT:
         # TODO
         pass
     else:
