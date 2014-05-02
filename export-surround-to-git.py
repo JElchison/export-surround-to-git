@@ -65,7 +65,7 @@ def verify_surround_environment():
 
 def find_all_branches_in_mainline_containing_path(mainline, path):
     cmd = 'sscm lsbranch -b"%s" -p"%s" -f"%s"' % (mainline, path, file)
-    p = Popen(cmd, shell=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+    p = subprocess.Popen(cmd, shell=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
     stdoutdata, stderrdata = p.communicate()
     # TODO
     return filter(None,stdoutdata.split('\n'))
@@ -73,7 +73,7 @@ def find_all_branches_in_mainline_containing_path(mainline, path):
 
 def find_all_files_in_branch_under_path(mainline, branch, path):
     cmd = 'sscm ls -b"%s" -p"%s"' % (branch, path)
-    p = Popen(cmd, shell=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+    p = subprocess.Popen(cmd, shell=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
     stdoutdata, stderrdata = p.communicate()
     # TODO
     return filter(None,stdoutdata.split('\n'))
@@ -81,7 +81,7 @@ def find_all_files_in_branch_under_path(mainline, branch, path):
 
 def find_all_file_versions(mainline, branch, path):
     cmd = 'sscm history %s -b"%s" -p"%s" -a"%s"' % (file, branch, path, action)
-    p = Popen(cmd, shell=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+    p = subprocess.Popen(cmd, shell=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
     stdoutdata, stderrdata = p.communicate()
     # TODO
     return filter(None,stdoutdata.split('\n'))
@@ -89,15 +89,17 @@ def find_all_file_versions(mainline, branch, path):
 
 def create_database():
     name = datetime.datetime.fromtimestamp(time.time()).strftime('%Y%m%d%H%M%S') + '.db'
-    conn = sqlite3.connect(name)
-    c = conn.cursor()
+    database = sqlite3.connect(name)
+    c = database.cursor()
     c.execute('''CREATE TABLE operations (timestamp INTEGER NOT NULL, action TEXT NOT NULL, mainline TEXT NOT NULL, branch TEXT NOT NULL, path TEXT, version INTEGER, data TEXT, PRIMARY KEY(action, mainline, branch, path, version, data))''')
+    database.commit()
     return conn
 
 
 def add_record_to_database(record, database):
     c = database.cursor()
     c.execute('''INSERT INTO operations VALUES (?, ?, ?, ?, ?, ?, ?)''', (record.timestamp, record.action, record.mainline, record.branch, record.path, record.version, record.data))
+    database.commit()
 
 
 def get_next_database_record(database, c):
@@ -107,7 +109,7 @@ def get_next_database_record(database, c):
     return c, c.fetchone()
 
 
-def cmd_parse(mainline, path):
+def cmd_parse(mainline, path, database):
     branches = find_all_branches_in_mainline_containing_path(mainline, path)
     for branch in branches:
         files = find_all_files_in_branch_under_path(mainline, branch, path)
@@ -145,17 +147,16 @@ def cmd_export(database):
 def handle_command(parser):
     args = parser.parse_args()
 
-    if args.command == "parse":
+    if args.command == "parse" and args.mainline and args.path:
         verify_surround_environment()
         database = create_database()
-        cmd_parse(database)
-    elif args.command == "export":
-        database = True  # TODO
-        cmd_export(database)
-    elif args.command == "all":
+        cmd_parse(args.mainline, args.path, database)
+    elif args.command == "export" and args.database:
+        cmd_export(args.database)
+    elif args.command == "all" and args.mainline and args.path:
         verify_surround_environment()
         database = create_database()
-        cmd_parse(database)
+        cmd_parse(args.mainline, args.path, database)
         cmd_export(database)
     else:
         parser.print_help()
@@ -164,6 +165,9 @@ def handle_command(parser):
 
 def parse_arguments():
     parser = argparse.ArgumentParser(prog='export-surround-to-git.py', description='Exports history from Seapine Surround in a format parseable by `git fast-import`.')
+    parser.add_argument('-m', '--mainline', nargs=1, description='Mainline branch containing history to export')
+    parser.add_argument('-p', '--path', nargs=1, description='Path containing history to export')
+    parser.add_argument('-d', '--database', nargs=1, description='Path to local database to resume an export')
     parser.add_argument('--version', action='version', version='%(prog)s '+VERSION)
     parser.add_argument('command', nargs='?', default='all')
     return parser
