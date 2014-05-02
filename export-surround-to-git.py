@@ -29,6 +29,9 @@ VERSION = '1.0.0'
 import sys
 import argparse
 import subprocess
+import time
+import datetime
+import sqlite3
 
 # TODO pep8
 # TODO pylint
@@ -81,15 +84,25 @@ def find_all_file_versions(mainline, branch, path):
     return filter(None,stdoutdata.split('\n'))
 
 
+def create_database():
+    name = datetime.datetime.fromtimestamp(time.time()).strftime('%Y%m%d%H%M%S') + '.db'
+    conn = sqlite3.connect(name)
+    c = conn.cursor()
+    c.execute('''CREATE TABLE operations (timestamp INTEGER NOT NULL, action TEXT NOT NULL, mainline TEXT NOT NULL, branch TEXT NOT NULL, path TEXT, version INTEGER, data TEXT, PRIMARY KEY(action, mainline, branch, path, version, data))''')
+    return conn
+
+
 def add_record_to_database(record, database):
-    # TODO
-    # TODO: ensure no duplicate records in database
-    pass
+    c = database.cursor()
+    c.execute('''INSERT INTO operations VALUES (?, ?, ?, ?, ?, ?, ?)''', (record.timestamp, record.action, record.mainline, record.branch, record.path, record.version, record.data))
+    
 
 
 def get_next_database_record(database):
-    # TODO
-    return record
+    c = database.cursor()
+    c.execute('''SELECT * FROM operations ORDER BY timestamp, version ASC''')
+    c.fetchone()
+    # TODO make c function-static
 
 
 def cmd_parse(mainline, path):
