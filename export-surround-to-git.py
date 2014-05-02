@@ -5,8 +5,6 @@
 #
 # Python script to export history from Seapine Surround in a format parseable by `git fast-import`.
 #
-# Version 1.0.0
-#
 # Copyright (C) 2014 Jonathan Elchison <JElchison@gmail.com>
 #
 # This program is free software; you can redistribute it and/or modify
@@ -23,6 +21,7 @@
 # with this program; if not, write to the Free Software Foundation, Inc.,
 # 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA.
 
+VERSION = '1.0.0'
 
 # Environment:  Assumes running in Bash version TODO.  Assumes sscm client version TODO.
 
@@ -59,11 +58,6 @@ def verify_surround_environment():
     # TODO ensure sscm is in PATH and correct version
     # TODO ensure username, password, server, and port are already cached
     pass
-
-
-def print_usage():
-    sys.stderr.write("Usage")
-    # TODO
 
 
 def find_all_branches_in_mainline_containing_path(mainline, path):
@@ -127,33 +121,36 @@ def cmd_export(database):
         record = get_next_database_record(database)
 
 
-def handle_command(args, opts):
-    command = args[0]
+def handle_command(parser):
+    args = parser.parse_args()
 
-    if command == "parse":
+    if args.command == "parse":
+        verify_surround_environment()
         database = create_database()
         cmd_parse(database)
-    elif command == "export":
+    elif args.command == "export":
         database = True  # TODO
         cmd_export(database)
-    elif command == "all":
+    elif args.command == "all":
+        verify_surround_environment()
         database = create_database()
         cmd_parse(database)
         cmd_export(database)
     else:
-        print_usage()
-        raise Exception("Unknown command")
+        parser.print_help()
+        sys.exit(1)
 
 
 def parse_arguments():
-    # TODO
-    pass
+    parser = argparse.ArgumentParser(prog='export-surround-to-git.py', description='Exports history from Seapine Surround in a format parseable by `git fast-import`.')
+    parser.add_argument('--version', action='version', version='%(prog)s '+VERSION)
+    parser.add_argument('command', nargs='?', default='all')
+    return parser
 
 
 def main():
-    verify_surround_environment()
-    args, opts = parse_arguments(sys.argv)
-    handle_command(args, opts)
+    parser = parse_arguments()
+    handle_command(parser)
     sys.exit(0)
 
 
