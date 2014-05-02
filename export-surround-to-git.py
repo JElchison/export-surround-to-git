@@ -61,18 +61,24 @@ def verify_surround_environment():
 
 
 def find_all_branches_in_mainline_containing_path(mainline, path):
-    # TODO
-    return ("One", "Two")
+    cmd = 'sscm lsbranch -b"%s" -p"%s" -f"%s"' % (mainline, path, file)
+    p = Popen(cmd, shell=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+    stdoutdata, stderrdata = p.communicate()
+    return filter(None,stdoutdata.split('\n'))
 
 
 def find_all_files_in_branch_under_path(mainline, branch, path):
-    # TODO
-    return ("One", "Two")
+    cmd = 'sscm ls -b"%s" -p"%s"' % (branch, path)
+    p = Popen(cmd, shell=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+    stdoutdata, stderrdata = p.communicate()
+    return filter(None,stdoutdata.split('\n'))
 
 
 def find_all_file_versions(mainline, branch, path):
-    # TODO
-    return (("timestamp1", "action1", 1, None), ("timestamp2", "addtobranch", 2, "childbranch"))
+    cmd = 'sscm history %s -b"%s" -p"%s" -a"%s"' % (file, branch, path, action)
+    p = Popen(cmd, shell=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+    stdoutdata, stderrdata = p.communicate()
+    return filter(None,stdoutdata.split('\n'))
 
 
 def add_record_to_database(record, database):
