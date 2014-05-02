@@ -67,6 +67,7 @@ def find_all_branches_in_mainline_containing_path(mainline, path):
     cmd = 'sscm lsbranch -b"%s" -p"%s" -f"%s"' % (mainline, path, file)
     p = Popen(cmd, shell=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
     stdoutdata, stderrdata = p.communicate()
+    # TODO
     return filter(None,stdoutdata.split('\n'))
 
 
@@ -74,6 +75,7 @@ def find_all_files_in_branch_under_path(mainline, branch, path):
     cmd = 'sscm ls -b"%s" -p"%s"' % (branch, path)
     p = Popen(cmd, shell=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
     stdoutdata, stderrdata = p.communicate()
+    # TODO
     return filter(None,stdoutdata.split('\n'))
 
 
@@ -81,6 +83,7 @@ def find_all_file_versions(mainline, branch, path):
     cmd = 'sscm history %s -b"%s" -p"%s" -a"%s"' % (file, branch, path, action)
     p = Popen(cmd, shell=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
     stdoutdata, stderrdata = p.communicate()
+    # TODO
     return filter(None,stdoutdata.split('\n'))
 
 
@@ -95,14 +98,13 @@ def create_database():
 def add_record_to_database(record, database):
     c = database.cursor()
     c.execute('''INSERT INTO operations VALUES (?, ?, ?, ?, ?, ?, ?)''', (record.timestamp, record.action, record.mainline, record.branch, record.path, record.version, record.data))
-    
 
 
-def get_next_database_record(database):
-    c = database.cursor()
-    c.execute('''SELECT * FROM operations ORDER BY timestamp, version ASC''')
-    c.fetchone()
-    # TODO make c function-static
+def get_next_database_record(database, c):
+    if not c:
+        c = database.cursor()
+        c.execute('''SELECT * FROM operations ORDER BY timestamp, version ASC''')
+    return c, c.fetchone()
 
 
 def cmd_parse(mainline, path):
@@ -134,10 +136,10 @@ def process_database_record(record):
 
 
 def cmd_export(database):
-    record = get_next_database_record(database)
+    c, record = get_next_database_record(database, None)
     while (record):
         process_database_record(record)
-        record = get_next_database_record(database)
+        c, record = get_next_database_record(database, c)
 
 
 def handle_command(parser):
