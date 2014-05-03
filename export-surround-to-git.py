@@ -138,34 +138,67 @@ def cmd_parse(mainline, path, database):
                     add_record_to_database(DatabaseRecord(timestamp, actionMap[action], mainline, branch, path+file, version, author, comment, data))
 
 
+def print_blob_for_file(path):
+    # TODO sscm get file/version to local path
+    mark = mark + 1
+    print "blob"
+    print "mark :%d" % mark
+    with open(path, "rb") as f:
+        f.seek(os.SEEK_END)
+        fileSize = f.tell()
+        print "data %d" % fileSize
+        f.seek(os.SEEK_SET)
+        print f.read()
+    print
+    return mark
+
+
 def process_database_record(record):
     if record.action == Actions.BRANCH_SNAPSHOT:
-        # TODO
-        pass
-    if record.action == Actions.BRANCH_BASELINE:
+        print "reset TAG_FIXUP" % record.data
+        print "from %s" % record.branch
+        print
+        files = find_all_files_in_branch_under_path(mainline, branch, path)
+        for file in files:
+            blobMark = print_blob_for_file(file)
+            if not startMark:
+                startMark = blobMark
+        mark = mark + 1
+        print "commit TAG_FIXUP" % record.branch
+        print "mark :%d" % mark
+        print "author %s %s" % (record.author, record.timestamp)
+        print "committer %s %s" % (record.author, record.timestamp)
+        print "data %d" % len(record.comment)
+        print record.comment
+        print "from TAG_FIXUP"
+        print "merge %s" % record.branch
+        iterMark = startMark
+        for file in files:
+            print "M 100644 :%d %s" % (iterMark, file)
+            iterMark = iterMark + 1
+        print
+        if iterMark != mark:
+            raise Exception("Marks fell out of sync while tagging '%s'." % record.data)
+        print "tag %s" % record.data
+        print "from TAG_FIXUP"
+        print "tagger %s %s" % (record.author, record.timestamp)
+        print "data %d" % len(record.comment)
+        print record.comment
+        print
+     if record.action == Actions.BRANCH_BASELINE:
         print "reset refs/heads/%s" % record.data
         print "from %s" % record.branch
         print
     if record.action == Actions.FILE_MODIFY or record.action == Actions.FILE_DELETE or record.action == Actions.FILE_RENAME:
         if record.action == Actions.FILE_MODIFY:
-            blobMark = mark = mark + 1
-            print "blob"
-            print "mark :%d" % mark
-            with open(record.path, "rb") as f:
-                f.seek(os.SEEK_END)
-                fileSize = f.tell()
-                print "data %d" % fileSize
-                f.seek(os.SEEK_SET)
-                print f.read()
-            print
-
+            blobMark = print_blob_for_file(record.path)
         mark = mark + 1
         print "commit refs/heads/%s" % record.branch
         print "mark :%d" % mark
         print "author %s %s" % (record.author, record.timestamp)
         print "committer %s %s" % (record.author, record.timestamp)
-        print "data %d" % len(comment)
-        print comment
+        print "data %d" % len(record.comment)
+        print record.comment
         print "from %s" % record.branch
         if record.data:
             print "merge %s" % record.data
@@ -185,6 +218,7 @@ def cmd_export(database):
     while (record):
         process_database_record(record)
         c, record = get_next_database_record(database, c)
+    # TODO `rm .git/TAG_FIXUP`
 
 
 def handle_command(parser):
