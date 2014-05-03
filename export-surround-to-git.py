@@ -45,12 +45,13 @@ class Actions:
     FILE_DELETE = 4
     FILE_RENAME = 5
 
+# TODO make these align with strings returned by sscm history
 actionMap = {"checkin" : Actions.FILE_MODIFY,
              "merge"   : Actions.FILE_MODIFY,
              "add"     : Actions.FILE_MODIFY,
              "rollback": Actions.FILE_MODIFY,
              "rename"  : Actions.FILE_RENAME,
-             "delete"  : Actions.FILE_DELEYE}
+             "delete"  : Actions.FILE_DELETE}
 
 
 class DatabaseRecord:
@@ -124,7 +125,7 @@ def get_next_database_record(database, c):
 def cmd_parse(mainline, path, database):
     branches = find_all_branches_in_mainline_containing_path(mainline, path)
     for branch in branches:
-        sys.stderr.write("Now servicing branch '%s' ..." % branch
+        sys.stderr.write("Now servicing branch '%s' ..." % branch)
         files = find_all_files_in_branch_under_path(mainline, branch, path)
         for file in files:
             versions = find_all_file_versions(mainline, branch, path+file)
@@ -185,7 +186,7 @@ def process_database_record(record):
         print "data %d" % len(record.comment)
         print record.comment
         print
-     if record.action == Actions.BRANCH_BASELINE:
+    if record.action == Actions.BRANCH_BASELINE:
         print "reset refs/heads/%s" % record.data
         print "from %s" % record.branch
         print
