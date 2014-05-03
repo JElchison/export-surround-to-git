@@ -146,13 +146,19 @@ def process_database_record(record):
         print "reset refs/heads/%s" % record.data
         print "from %s" % record.branch
         print
-    if record.action == Actions.FILE_MODIFY:
-        blobMark = mark = mark + 1
-        print "blob"
-        print "mark :%d" % mark
-        print "data %d" % len(file)
-        print file
-        print
+    if record.action == Actions.FILE_MODIFY or record.action == Actions.FILE_DELETE or record.action == Actions.FILE_RENAME:
+        if record.action == Actions.FILE_MODIFY:
+            blobMark = mark = mark + 1
+            print "blob"
+            print "mark :%d" % mark
+            with open(record.path, "rb") as f:
+                f.seek(os.SEEK_END)
+                fileSize = f.tell()
+                print "data %d" % fileSize
+                f.seek(os.SEEK_SET)
+                print f.read()
+            print
+
         mark = mark + 1
         print "commit refs/heads/%s" % record.branch
         print "mark :%d" % mark
@@ -160,17 +166,16 @@ def process_database_record(record):
         print "committer %s %s" % (record.author, record.timestamp)
         print "data %d" % len(comment)
         print comment
-        print "from :%d" % #TODO
+        print "from %s" % record.branch
         if record.data:
             print "merge %s" % record.data
-        print "M 100644 :%d %s" % (blobMark, record.path)
+        if record.action == Actions.FILE_MODIFY: 
+            print "M 100644 :%d %s" % (blobMark, record.path)
+        elif record.action == Actions.FILE_DELETE:
+            print "D %s" % record.path
+        elif record.action == Actions.FILE_RENAME:
+            print "R %s %s" % (record.path, record.data)
         print
-    if record.action == Actions.FILE_DELETE:
-        # TODO
-        pass
-    if record.action == Actions.FILE_RENAME:
-        # TODO
-        pass
     else:
         raise Exception("Unknown record action")
 
