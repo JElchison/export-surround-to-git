@@ -147,16 +147,24 @@ def process_database_record(record):
         print "from %s" % record.branch
         print
     if record.action == Actions.FILE_MODIFY:
+        blobMark = mark = mark + 1
+        print "blob"
+        print "mark :%d" % mark
+        print "data %d" % len(file)
+        print file
+        print
         mark = mark + 1
         print "commit refs/heads/%s" % record.branch
         print "mark :%d" % mark
         print "author %s %s" % (record.author, record.timestamp)
         print "committer %s %s" % (record.author, record.timestamp)
         print "data %d" % len(comment)
+        print comment
         print "from :%d" % #TODO
         if record.data:
             print "merge %s" % record.data
-        print "M 100644 :%d %s" % (#TODO
+        print "M 100644 :%d %s" % (blobMark, record.path)
+        print
     if record.action == Actions.FILE_DELETE:
         # TODO
         pass
