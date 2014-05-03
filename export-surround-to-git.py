@@ -56,7 +56,7 @@ class DatabaseRecord:
         self.version = version
         self.data = data
 
-    def GetTuple():
+    def get_tuple():
         return (self.timestamp, self.action, self.mainline, self.branch, self.path, self.version, self.data)
 
 
@@ -101,14 +101,14 @@ def create_database():
 
 def add_record_to_database(record, database):
     c = database.cursor()
-    c.execute('''INSERT INTO operations VALUES (?, ?, ?, ?, ?, ?, ?)''', record.GetTuple())
+    c.execute('''INSERT INTO operations VALUES (?, ?, ?, ?, ?, ?, ?)''', record.get_tuple())
     database.commit()
 
 
 def get_next_database_record(database, c):
     if not c:
         c = database.cursor()
-        c.execute('''SELECT * FROM operations ORDER BY timestamp, version ASC''')
+    c.execute('''SELECT * FROM operations ORDER BY timestamp, version ASC''')
     return c, c.fetchone()
 
 
