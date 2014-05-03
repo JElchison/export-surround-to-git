@@ -45,19 +45,28 @@ class Actions:
     FILE_DELETE = 4
     FILE_RENAME = 5
 
+actionMap = {"checkin" : Actions.FILE_MODIFY,
+             "merge"   : Actions.FILE_MODIFY,
+             "add"     : Actions.FILE_MODIFY,
+             "rollback": Actions.FILE_MODIFY,
+             "rename"  : Actions.FILE_RENAME,
+             "delete"  : Actions.FILE_DELEYE}
+
 
 class DatabaseRecord:
-    def DatabaseRecord(self, timestamp, action, mainline, branch, path, version, data):
+    def DatabaseRecord(self, timestamp, action, mainline, branch, path, version, author, comment, data):
         self.timestamp = timestamp
         self.action = action
         self.mainline = mainline
         self.branch = branch
         self.path = path
         self.version = version
+        self.author = author
+        self.comment = comment
         self.data = data
 
     def get_tuple():
-        return (self.timestamp, self.action, self.mainline, self.branch, self.path, self.version, self.data)
+        return (self.timestamp, self.action, self.mainline, self.branch, self.path, self.version, self.author, self.comment, self.data)
 
 
 def verify_surround_environment():
@@ -115,25 +124,43 @@ def get_next_database_record(database, c):
 def cmd_parse(mainline, path, database):
     branches = find_all_branches_in_mainline_containing_path(mainline, path)
     for branch in branches:
+        sys.stderr.write("Now servicing branch '%s' ..." % branch
         files = find_all_files_in_branch_under_path(mainline, branch, path)
         for file in files:
             versions = find_all_file_versions(mainline, branch, path+file)
-            for timestamp, action, version, data in versions:
-                if action == "checkin" or action == "merge" or action == "add" or action == "rollback":
-                    add_record_to_database(DatabaseRecord(timestamp, Actions.FILE_MODOFY, mainline, branch, path+file, version, data))
-                if action == "delete":
-                    add_record_to_database(DatabaseRecord(timestamp, Actions.FILE_DELETE, mainline, branch, path+file, version, data))
-                if action == "rename":
-                    add_record_to_database(DatabaseRecord(timestamp, Actions.FILE_RENAME, mainline, branch, path+file, version, data))
-                elif action == "addtobranch":
+            for timestamp, action, version, author, comment, data in versions:
+                if action == "addtobranch":
                     if is_snapshot_branch(data):
-                        add_record_to_database(DatabaseRecord(timestamp, Actions.BRANCH_SNAPSHOT, mainline, branch, path, version, data))
+                        add_record_to_database(DatabaseRecord(timestamp, Actions.BRANCH_SNAPSHOT, mainline, branch, path, version, author, comment, data))
                     else:
-                        add_record_to_database(DatabaseRecord(timestamp, Actions.BRANCH_BASELINE, mainline, branch, path, version, data))
+                        add_record_to_database(DatabaseRecord(timestamp, Actions.BRANCH_BASELINE, mainline, branch, path, version, author, comment, data))
+                else:
+                    add_record_to_database(DatabaseRecord(timestamp, actionMap[action], mainline, branch, path+file, version, author, comment, data))
 
 
 def process_database_record(record):
     if record.action == Actions.BRANCH_SNAPSHOT:
+        # TODO
+        pass
+    if record.action == Actions.BRANCH_BASELINE:
+        print "reset refs/heads/%s" % record.data
+        print "from %s" % record.branch
+        print
+    if record.action == Actions.FILE_MODIFY:
+        mark = mark + 1
+        print "commit refs/heads/%s" % record.branch
+        print "mark :%d" % mark
+        print "author %s %s" % (record.author, record.timestamp)
+        print "committer %s %s" % (record.author, record.timestamp)
+        print "data %d" % len(comment)
+        print "from :%d" % #TODO
+        if record.data:
+            print "merge %s" % record.data
+        print "M 100644 :%d %s" % (#TODO
+    if record.action == Actions.FILE_DELETE:
+        # TODO
+        pass
+    if record.action == Actions.FILE_RENAME:
         # TODO
         pass
     else:
