@@ -173,6 +173,7 @@ def process_database_record(record):
         print record.comment
         print "from TAG_FIXUP"
         print "merge %s" % record.branch
+        print "deleteall"
         iterMark = startMark
         for file in files:
             print "M 100644 :%d %s" % (iterMark, file)
