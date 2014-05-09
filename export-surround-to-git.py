@@ -52,7 +52,14 @@ actionMap = {"checkin" : Actions.FILE_MODIFY,
              "rollback": Actions.FILE_MODIFY,
              "rename"  : Actions.FILE_RENAME,
              "delete"  : Actions.FILE_DELETE}
-
+"""
+AddToRepository, AddToBranch, AddFromBranch,
+AttachToIssue, AttachToTestCase, AttachToRequirement, AttachToExternal,
+BreakShare, CheckIn, Duplicate, FileDestroyed, FileMoved, FileRenamed,
+Label, Promote, PromoteFrom, Rebase, RebaseWithMerge, Remove,
+RepoDestroyed, RepoMoved, RepoRenamed, Restore, Share, RollbackFile,
+RollbackRebase, and RollbackPromote
+"""
 
 class DatabaseRecord:
     def DatabaseRecord(self, timestamp, action, mainline, branch, path, version, author, comment, data):
@@ -73,32 +80,44 @@ class DatabaseRecord:
 def verify_surround_environment():
     # TODO ensure sscm is in PATH and correct version
     # TODO ensure username, password, server, and port are already cached
+    # read -s -p"Enter Surround password:" pw; sscm setclient -zrseoh9-sp:4900 -y"ElchiJo:$pw"; pw=""
+    # sscm version
     pass
 
 
-def find_all_branches_in_mainline_containing_path(mainline, path):
-    cmd = 'sscm lsbranch -b"%s" -p"%s" -f"%s"' % (mainline, path, file)
+def verify_git_environment():
+    # TODO ensure git is in PATH and correct version
+    # git --version
+    pass
+
+
+def find_all_branches_in_mainline_containing_path(mainline, path, file):
+    cmd = 'sscm lsbranch -b"%s" -p"%s" -f"%s" | sed -r \'s/ \((baseline|mainline|snapshot)\)$//g\'' % (mainline, path, file)
     p = subprocess.Popen(cmd, shell=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
     stdoutdata, stderrdata = p.communicate()
-    # TODO
     return filter(None,stdoutdata.split('\n'))
 
 
 def find_all_files_in_branch_under_path(mainline, branch, path):
-    cmd = 'sscm ls -b"%s" -p"%s"' % (branch, path)
+    cmd = 'sscm ls -b"%s" -p"%s" -r | grep -v \'Total listed files\' | sed -r \'s/unknown status.*$//g\'' % (branch, path)
     p = subprocess.Popen(cmd, shell=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
     stdoutdata, stderrdata = p.communicate()
-    # TODO
-    return filter(None,stdoutdata.split('\n'))
-
+    lines = filter(None,stdoutdata.split('\n'))
+    for line in lines:
+        if line[0] != ' ':
+            lastDirectory = line
+        elif line[1] != ' ':
+            fileList.append("%s/%s" % (lastDirectory, line))
+    return fileList
 
 def find_all_file_versions(mainline, branch, path):
-    cmd = 'sscm history %s -b"%s" -p"%s" -a"%s"' % (file, branch, path, action)
+    cmd = 'sscm history "%s" -b"%s" -p"%s" -a"%s" | tail -n +5' % (file, branch, path, action)
     p = subprocess.Popen(cmd, shell=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
     stdoutdata, stderrdata = p.communicate()
-    # TODO
-    return filter(None,stdoutdata.split('\n'))
-
+    lines = filter(None,stdoutdata.split('\n'))
+    # TODO - parse history format.  accommodate multi-line comments.
+    # TODO - return list of (timestamp, action, version, author, comment, data)
+    return versionList
 
 def create_database():
     name = datetime.datetime.fromtimestamp(time.time()).strftime('%Y%m%d%H%M%S') + '.db'
