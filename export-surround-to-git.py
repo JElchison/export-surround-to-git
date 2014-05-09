@@ -45,21 +45,34 @@ class Actions:
     FILE_DELETE = 4
     FILE_RENAME = 5
 
-# TODO make these align with strings returned by sscm history
-actionMap = {"checkin" : Actions.FILE_MODIFY,
-             "merge"   : Actions.FILE_MODIFY,
-             "add"     : Actions.FILE_MODIFY,
-             "rollback": Actions.FILE_MODIFY,
-             "rename"  : Actions.FILE_RENAME,
-             "delete"  : Actions.FILE_DELETE}
-"""
-AddToRepository, AddToBranch, AddFromBranch,
-AttachToIssue, AttachToTestCase, AttachToRequirement, AttachToExternal,
-BreakShare, CheckIn, Duplicate, FileDestroyed, FileMoved, FileRenamed,
-Label, Promote, PromoteFrom, Rebase, RebaseWithMerge, Remove,
-RepoDestroyed, RepoMoved, RepoRenamed, Restore, Share, RollbackFile,
-RollbackRebase, and RollbackPromote
-"""
+actionMap = {"AddToRepository"     : Actions.FILE_MODIFY,
+             "AddToBranch"         : None,
+             "AddFromBranch"       : Actions.FILE_MODIFY,
+             "AttachToIssue"       : None,  // TODO
+             "AttachToTestCase"    : None,  // TODO
+             "AttachToRequirement" : None,  // TODO
+             "AttachToExternal"    : None,  // TODO
+             "BreakShare"          : None,
+             "CheckIn"             : Actions.FILE_MODIFY,
+             "Duplicate"           : Actions.FILE_MODIFY,  // TODO verify this
+             "FileDestroyed"       : Actions.FILE_DELETE,
+             "FileMoved"           : Actions.FILE_RENAME,
+             "FileRenamed"         : Actions.FILE_RENAME,
+             "Label"               : None,  // TODO
+             "Promote"             : None,
+             "PromoteFrom"         : Actions.FILE_MODIFY,
+             "Rebase"              : Actions.FILE_MODIFY,
+             "RebaseWithMerge"     : Actions.FILE_MODIFY,
+             "Remove"              : Actions.FILE_DELETE,
+             "RepoDestroyed"       : None,  // TODO verify this
+             "RepoMoved"           : None,  // TODO verify this
+             "RepoRenamed"         : None,  // TODO verify this
+             "Restore"             : Actions.FILE_MODIFY,
+             "Share"               : None,
+             "RollbackFile"        : Actions.FILE_MODIFY,
+             "RollbackRebase"      : Actions.FILE_MODIFY,
+             "RollbackPromote"     : Actions.FILE_MODIFY}
+
 
 class DatabaseRecord:
     def DatabaseRecord(self, timestamp, action, mainline, branch, path, version, author, comment, data):
@@ -149,7 +162,7 @@ def cmd_parse(mainline, path, database):
         for file in files:
             versions = find_all_file_versions(mainline, branch, path+file)
             for timestamp, action, version, author, comment, data in versions:
-                if action == "addtobranch":
+                if action == "AddToBranch":
                     if is_snapshot_branch(data):
                         add_record_to_database(DatabaseRecord(timestamp, Actions.BRANCH_SNAPSHOT, mainline, branch, path, version, author, comment, data))
                     else:
