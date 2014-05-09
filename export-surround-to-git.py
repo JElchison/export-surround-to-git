@@ -48,25 +48,25 @@ class Actions:
 actionMap = {"AddToRepository"     : Actions.FILE_MODIFY,
              "AddToBranch"         : None,
              "AddFromBranch"       : Actions.FILE_MODIFY,
-             "AttachToIssue"       : None,  // TODO
-             "AttachToTestCase"    : None,  // TODO
-             "AttachToRequirement" : None,  // TODO
-             "AttachToExternal"    : None,  // TODO
+             "AttachToIssue"       : None,  # TODO
+             "AttachToTestCase"    : None,  # TODO
+             "AttachToRequirement" : None,  # TODO
+             "AttachToExternal"    : None,  # TODO
              "BreakShare"          : None,
              "CheckIn"             : Actions.FILE_MODIFY,
-             "Duplicate"           : Actions.FILE_MODIFY,  // TODO verify this
+             "Duplicate"           : Actions.FILE_MODIFY,  # TODO verify this
              "FileDestroyed"       : Actions.FILE_DELETE,
              "FileMoved"           : Actions.FILE_RENAME,
              "FileRenamed"         : Actions.FILE_RENAME,
-             "Label"               : None,  // TODO
+             "Label"               : None,  # TODO
              "Promote"             : None,
              "PromoteFrom"         : Actions.FILE_MODIFY,
              "Rebase"              : Actions.FILE_MODIFY,
              "RebaseWithMerge"     : Actions.FILE_MODIFY,
              "Remove"              : Actions.FILE_DELETE,
-             "RepoDestroyed"       : None,  // TODO verify this
-             "RepoMoved"           : None,  // TODO verify this
-             "RepoRenamed"         : None,  // TODO verify this
+             "RepoDestroyed"       : None,  # TODO verify this
+             "RepoMoved"           : None,  # TODO verify this
+             "RepoRenamed"         : None,  # TODO verify this
              "Restore"             : Actions.FILE_MODIFY,
              "Share"               : None,
              "RollbackFile"        : Actions.FILE_MODIFY,
