@@ -106,3 +106,5 @@ docs/_build/
 
 # sqlite databases
 *.db
+.MySCMServerInfo
+scratch/
