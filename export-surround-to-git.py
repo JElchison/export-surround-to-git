@@ -28,6 +28,7 @@ VERSION = '1.0.0'
 import sys
 import argparse
 import subprocess
+import re
 import time
 import datetime
 import sqlite3
@@ -45,33 +46,33 @@ class Actions:
     FILE_DELETE = 4
     FILE_RENAME = 5
 
-actionMap = {"AddToRepository"     : Actions.FILE_MODIFY,
-             "AddToBranch"         : None,
-             "AddFromBranch"       : Actions.FILE_MODIFY,
-             "AttachToIssue"       : None,  # TODO
-             "AttachToTestCase"    : None,  # TODO
-             "AttachToRequirement" : None,  # TODO
-             "AttachToExternal"    : None,  # TODO
-             "BreakShare"          : None,
-             "CheckIn"             : Actions.FILE_MODIFY,
-             "Duplicate"           : Actions.FILE_MODIFY,  # TODO verify this
-             "FileDestroyed"       : Actions.FILE_DELETE,
-             "FileMoved"           : Actions.FILE_RENAME,
-             "FileRenamed"         : Actions.FILE_RENAME,
-             "Label"               : None,  # TODO
-             "Promote"             : None,
-             "PromoteFrom"         : Actions.FILE_MODIFY,
-             "Rebase"              : Actions.FILE_MODIFY,
-             "RebaseWithMerge"     : Actions.FILE_MODIFY,
-             "Remove"              : Actions.FILE_DELETE,
-             "RepoDestroyed"       : None,  # TODO verify this
-             "RepoMoved"           : None,  # TODO verify this
-             "RepoRenamed"         : None,  # TODO verify this
-             "Restore"             : Actions.FILE_MODIFY,
-             "Share"               : None,
-             "RollbackFile"        : Actions.FILE_MODIFY,
-             "RollbackRebase"      : Actions.FILE_MODIFY,
-             "RollbackPromote"     : Actions.FILE_MODIFY}
+actionMap = {"add to repository"     : Actions.FILE_MODIFY,
+             "add to branch"         : None,
+             "add from branch"       : Actions.FILE_MODIFY,
+             "attach to issue"       : None,  # TODO
+             "attach to test case"   : None,  # TODO
+             "attach to requirement" : None,  # TODO
+             "attach to external"    : None,  # TODO
+             "break share"           : None,
+             "checkin"               : Actions.FILE_MODIFY,
+             "duplicate"             : Actions.FILE_MODIFY,  # TODO verify this
+             "file destroyed"        : Actions.FILE_DELETE,
+             "file moved"            : Actions.FILE_RENAME,
+             "file renamed"          : Actions.FILE_RENAME,
+             "label"                 : None,  # TODO
+             "promote"               : None,
+             "promote from"          : Actions.FILE_MODIFY,
+             "rebase from"           : Actions.FILE_MODIFY,
+             "rebase with merge"     : Actions.FILE_MODIFY,
+             "remove"                : Actions.FILE_DELETE,
+             "repo destroyed"        : None,  # TODO verify this
+             "repo moved"            : None,  # TODO verify this
+             "repo renamed"          : None,  # TODO verify this
+             "restore"               : Actions.FILE_MODIFY,
+             "share"                 : None,
+             "rollback file"         : Actions.FILE_MODIFY,
+             "rollback rebase"       : Actions.FILE_MODIFY,
+             "rollback promote"      : Actions.FILE_MODIFY}
 
 
 class DatabaseRecord:
@@ -116,21 +117,44 @@ def find_all_files_in_branch_under_path(mainline, branch, path):
     p = subprocess.Popen(cmd, shell=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
     stdoutdata, stderrdata = p.communicate()
     lines = filter(None,stdoutdata.split('\n'))
+    fileList = []
     for line in lines:
         if line[0] != ' ':
             lastDirectory = line
         elif line[1] != ' ':
-            fileList.append("%s/%s" % (lastDirectory, line))
+            fileList.append("%s/%s" % (lastDirectory, line.strip()))
     return fileList
 
-def find_all_file_versions(mainline, branch, path):
-    cmd = 'sscm history "%s" -b"%s" -p"%s" -a"%s" | tail -n +5' % (file, branch, path, action)
+
+def find_all_file_versions(branch, path, file):
+    cmd = 'sscm history "%s" -b"%s" -p"%s" | tail -n +5' % (file, branch, path)
     p = subprocess.Popen(cmd, shell=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
     stdoutdata, stderrdata = p.communicate()
     lines = filter(None,stdoutdata.split('\n'))
-    # TODO - parse history format.  accommodate multi-line comments.
-    # TODO - return list of (timestamp, action, version, author, comment, data)
+    versionList = []
+    bFoundOne = False
+    for line in lines:
+        # TODO compile this RE once, before the loop (for efficiency)
+        result = re.search(r"^([\w]+(.*[\w]+)?)(\[(.*)\])?(\t|[ ]{2,})([\w]+(.*[\w]+)?)(\t|[ ]{2,})([\d]+)(\t|[ ]{2,})([\w]+.*)$", line)
+        if result:
+            if bFoundOne:
+                versionList.append((timestamp, action, int(version), author, comment, data))
+            bFoundOne = True
+            action = result.group(1)
+            author = result.group(6)
+            version = result.group(9)
+            timestamp = result.group(11)
+            comment = None
+            data = result.group(4)
+        else:
+            if not comment:
+                comment = re.sub("^ Comments \- ", "", line, count=1)
+            else:
+                comment += "\n" + line
+    if bFoundOne:
+        versionList.append((timestamp, action, int(version), author, comment, data))
     return versionList
+
 
 def create_database():
     name = datetime.datetime.fromtimestamp(time.time()).strftime('%Y%m%d%H%M%S') + '.db'
@@ -154,25 +178,31 @@ def get_next_database_record(database, c):
     return c, c.fetchone()
 
 
-def cmd_parse(mainline, path, database):
-    branches = find_all_branches_in_mainline_containing_path(mainline, path)
+def cmd_parse(mainline, path, file, database):
+    branches = find_all_branches_in_mainline_containing_path(mainline, path, file)
     for branch in branches:
-        sys.stderr.write("Now servicing branch '%s' ..." % branch)
+        sys.stderr.write("\nNow servicing branch '%s' ..." % branch)
         files = find_all_files_in_branch_under_path(mainline, branch, path)
         for file in files:
             versions = find_all_file_versions(mainline, branch, path+file)
             for timestamp, action, version, author, comment, data in versions:
+                epoch = int(time.mktime(time.strptime(timestamp, "%m/%d/%y %I:%M %p")))
                 if action == "AddToBranch":
                     if is_snapshot_branch(data):
-                        add_record_to_database(DatabaseRecord(timestamp, Actions.BRANCH_SNAPSHOT, mainline, branch, path, version, author, comment, data))
+                        branchAction = Actions.BRANCH_SNAPSHOT
                     else:
-                        add_record_to_database(DatabaseRecord(timestamp, Actions.BRANCH_BASELINE, mainline, branch, path, version, author, comment, data))
+                        branchAction = Actions.BRANCH_BASELINE
+                    add_record_to_database(DatabaseRecord(epoch, branchAction, mainline, branch, path, version, author, comment, data))
                 else:
-                    add_record_to_database(DatabaseRecord(timestamp, actionMap[action], mainline, branch, path+file, version, author, comment, data))
+                    add_record_to_database(DatabaseRecord(epoch, actionMap[action], mainline, branch, path+file, version, author, comment, data))
 
 
-def print_blob_for_file(path):
-    # TODO sscm get file/version to local path
+def print_blob_for_file(branch, path, file, version):
+    scratchDir = "scratch"
+    os.remove("%s" % (scratchDir, file))
+    cmd = 'sscm get "%s" -b"%s" -p"%s" -d"%s" -f -i -v%d' % (file, branch, scratchDir, version)
+    subprocess.check_call(cmd, shell=True)
+
     mark = mark + 1
     print "blob"
     print "mark :%d" % mark
@@ -258,16 +288,16 @@ def cmd_export(database):
 def handle_command(parser):
     args = parser.parse_args()
 
-    if args.command == "parse" and args.mainline and args.path:
+    if args.command == "parse" and args.mainline and args.path and args.file:
         verify_surround_environment()
         database = create_database()
-        cmd_parse(args.mainline, args.path, database)
+        cmd_parse(args.mainline[0], args.path[0], args.file[0], database)
     elif args.command == "export" and args.database:
-        cmd_export(args.database)
-    elif args.command == "all" and args.mainline and args.path:
+        cmd_export(args.database[0])
+    elif args.command == "all" and args.mainline and args.path and args.file:
         verify_surround_environment()
         database = create_database()
-        cmd_parse(args.mainline, args.path, database)
+        cmd_parse(args.mainline[0], args.path[0], args.file[0], database)
         cmd_export(database)
     else:
         parser.print_help()
@@ -278,6 +308,7 @@ def parse_arguments():
     parser = argparse.ArgumentParser(prog='export-surround-to-git.py', description='Exports history from Seapine Surround in a format parseable by `git fast-import`.')
     parser.add_argument('-m', '--mainline', nargs=1, help='Mainline branch containing history to export')
     parser.add_argument('-p', '--path', nargs=1, help='Path containing history to export')
+    parser.add_argument('-f', '--file', nargs=1, help='Any filename in target path')  #TODO auto-generate this
     parser.add_argument('-d', '--database', nargs=1, help='Path to local database to resume an export')
     parser.add_argument('--version', action='version', version='%(prog)s '+VERSION)
     parser.add_argument('command', nargs='?', default='all')
