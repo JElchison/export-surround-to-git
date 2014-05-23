@@ -291,6 +291,7 @@ def handle_command(parser):
     if args.command == "parse" and args.mainline and args.path and args.file:
         verify_surround_environment()
         database = create_database()
+        # TODO why are [0] required?
         cmd_parse(args.mainline[0], args.path[0], args.file[0], database)
     elif args.command == "export" and args.database:
         cmd_export(args.database[0])
