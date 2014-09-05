@@ -138,6 +138,7 @@ def find_all_file_versions(branch, path, file):
         result = re.search(r"^([\w]+(.*[\w]+)?)(\[(.*)\])?(\t|[ ]{2,})([\w]+(.*[\w]+)?)(\t|[ ]{2,})([\d]+)(\t|[ ]{2,})([\w]+.*)$", line)
         if result:
             if bFoundOne:
+                # TODO why isn't the below line simply after the "data =" line below?  seems unnecessarily complex.
                 versionList.append((timestamp, action, int(version), author, comment, data))
             bFoundOne = True
             action = result.group(1)
@@ -199,6 +200,7 @@ def cmd_parse(mainline, path, file, database):
 
 def print_blob_for_file(branch, path, file, version):
     scratchDir = "scratch"
+    # TODO following line isn't right (not enough format specifiers); need path join operation?
     os.remove("%s" % (scratchDir, file))
     cmd = 'sscm get "%s" -b"%s" -p"%s" -d"%s" -f -i -v%d' % (file, branch, scratchDir, version)
     subprocess.check_call(cmd, shell=True)
@@ -218,6 +220,7 @@ def print_blob_for_file(branch, path, file, version):
 
 def process_database_record(record):
     if record.action == Actions.BRANCH_SNAPSHOT:
+        # TODO below is missing format specifier
         print "reset TAG_FIXUP" % record.data
         print "from %s" % record.branch
         print
@@ -227,6 +230,7 @@ def process_database_record(record):
             if not startMark:
                 startMark = blobMark
         mark = mark + 1
+        # TODO below is missing format specifier
         print "commit TAG_FIXUP" % record.branch
         print "mark :%d" % mark
         print "author %s %s" % (record.author, record.timestamp)
@@ -294,12 +298,18 @@ def handle_command(parser):
         # TODO why are [0] required?
         cmd_parse(args.mainline[0], args.path[0], args.file[0], database)
     elif args.command == "export" and args.database:
+        verify_git_environment()
         cmd_export(args.database[0])
+    elif args.command == "verify" and args.database:
+        verify_git_environment()
+        cmd_verify(args.database[0])
     elif args.command == "all" and args.mainline and args.path and args.file:
         verify_surround_environment()
+        verify_git_environment()
         database = create_database()
         cmd_parse(args.mainline[0], args.path[0], args.file[0], database)
         cmd_export(database)
+        cmd_verify(args.database[0])
     else:
         parser.print_help()
         sys.exit(1)
