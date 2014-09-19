@@ -154,7 +154,7 @@ def find_all_file_versions(mainline, branch, path):
     stdoutdata, stderrdata = p.communicate()
     sys.stderr.write(stderrdata)
     lines = filter(None,stdoutdata.split('\n'))
-    histRegex = re.compile(r"^(?P<action>[\w]+([^\[\]]*[\w]+)?)(\[(?P<data>[^\[\]]*)\])?([\s]+)(?P<author>[\w]+([^\[\]]*[\w]+)?)([\s]+)(?P<version>[\d]+)([\s]+)(?P<timestamp>[\w]+[^\[\]]*)$")
+    histRegex = re.compile(r"^(?P<action>[\w]+([^\[\]]*[\w]+)?)(\[(?P<data>[^\[\]]*?)( v\. [\d]+)?\])?([\s]+)(?P<author>[\w]+([^\[\]]*[\w]+)?)([\s]+)(?P<version>[\d]+)([\s]+)(?P<timestamp>[\w]+[^\[\]]*)$")
     versionList = []
     bFoundOne = False
     for line in lines:
@@ -221,6 +221,24 @@ def cmd_parse(mainline, path, file, database):
     sys.stderr.write("\nParsing complete.\n")
 
 
+def translate_branch_name(name):
+    # pre-processing
+    name = re.sub(r'[\/]+', r'/', name)
+
+    # apply rules from git check-ref-format
+    name = name.replace("/.", "/_")
+    name = re.sub(r'\.lock($|\/)', r'_lock', name)
+    name = re.sub(r'[\.]+', r'_', name)
+    for char in name:
+        if char < '\040' or char == '\177':
+            char = '_'
+    name = name.replace(" ", "-")
+    name = re.sub(r'[\~\^\:\?\*\[\\]+', r'_', name)
+    name = re.sub(r'(^[\/]|[\/\.]$)', r'_', name)
+    name = name.replace("@{", "__")
+    return name
+
+
 def print_blob_for_file(branch, fullPath, version=None):
     global mark
 
@@ -244,16 +262,17 @@ def print_blob_for_file(branch, fullPath, version=None):
     print "data %d" % os.path.getsize(localPath)
     with open(localPath, "rb") as f:
         print f.read()
-    print
     return mark
 
 
 def process_database_record(record):
     global mark
+    # TODO how detect this?
+    timezone = "-0500"
 
     if record.action == Actions.BRANCH_SNAPSHOT:
         print "reset TAG_FIXUP"
-        print "from %s" % record.branch
+        print "from refs/heads/%s" % translate_branch_name(record.branch)
         print
         files = find_all_files_in_branch_under_path(record.mainline, record.data, record.path)
         startMark = None
@@ -264,46 +283,47 @@ def process_database_record(record):
         mark = mark + 1
         print "commit TAG_FIXUP"
         print "mark :%d" % mark
-        print "author %s %s" % (record.author, record.timestamp)
-        print "committer %s %s" % (record.author, record.timestamp)
+        print "author %s <%s> %s %s" % (record.author, record.author, record.timestamp, timezone)
+        print "committer %s <%s> %s %s" % (record.author, record.author, record.timestamp, timezone)
         if record.comment:
             print "data %d" % len(record.comment)
             print record.comment
-        print "from TAG_FIXUP"
-        print "merge %s" % record.branch
+        else:
+            print "data 0"
+        print "merge refs/heads/%s" % translate_branch_name(record.branch)
         print "deleteall"
         iterMark = startMark
         for file in files:
             print "M 100644 :%d %s" % (iterMark, file)
             iterMark = iterMark + 1
-        print
         if iterMark != mark:
             raise Exception("Marks fell out of sync while tagging '%s'." % record.data)
-        print "tag %s" % record.data
+        print "tag %s" % translate_branch_name(record.data)
         print "from TAG_FIXUP"
-        print "tagger %s %s" % (record.author, record.timestamp)
+        print "tagger %s <%s> %s %s" % (record.author, record.author, record.timestamp, timezone)
         if record.comment:
             print "data %d" % len(record.comment)
             print record.comment
-        print
+        else:
+            print "data 0"
     elif record.action == Actions.BRANCH_BASELINE:
-        print "reset refs/heads/%s" % record.data
-        print "from %s" % record.branch
-        print
+        print "reset refs/heads/%s" % translate_branch_name(record.data)
+        print "from refs/heads/%s" % translate_branch_name(record.branch)
     elif record.action == Actions.FILE_MODIFY or record.action == Actions.FILE_DELETE or record.action == Actions.FILE_RENAME:
         if record.action == Actions.FILE_MODIFY:
             blobMark = print_blob_for_file(record.branch, record.path, record.version)
         mark = mark + 1
-        print "commit refs/heads/%s" % record.branch
+        print "commit refs/heads/%s" % translate_branch_name(record.branch)
         print "mark :%d" % mark
-        print "author %s %s" % (record.author, record.timestamp)
-        print "committer %s %s" % (record.author, record.timestamp)
+        print "author %s <%s> %s %s" % (record.author, record.author, record.timestamp, timezone)
+        print "committer %s <%s> %s %s" % (record.author, record.author, record.timestamp, timezone)
         if record.comment:
             print "data %d" % len(record.comment)
             print record.comment
-        print "from %s" % record.branch
+        else:
+            print "data 0"
         if record.data:
-            print "merge %s" % record.data
+            print "merge refs/heads/%s" % translate_branch_name(record.data)
         if record.action == Actions.FILE_MODIFY: 
             print "M 100644 :%d %s" % (blobMark, record.path)
         elif record.action == Actions.FILE_DELETE:
