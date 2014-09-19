@@ -41,11 +41,13 @@ import shutil
 # TODO test with python3
 # TODO make exception handlers as specific as possible
 # TODO add verbose comments
+# TODO look for other efficiency gainers, like calling translate_branch_name multiple times in same function
 # TODO see other TODOs
 
 
 scratchDir = "scratch/"
 mark = 0
+tagDict = {}
 
 class Actions:
     BRANCH_SNAPSHOT = 1
@@ -57,7 +59,7 @@ class Actions:
 actionMap = {"add"                   : Actions.FILE_MODIFY,
              "add to repository"     : Actions.FILE_MODIFY,
              "add to branch"         : None,
-             "add from branch"       : Actions.FILE_MODIFY,
+             "add from branch"       : None,
              "attach to issue"       : None,  # TODO
              "attach to test case"   : None,  # TODO
              "attach to requirement" : None,  # TODO
@@ -157,6 +159,7 @@ def find_all_file_versions(mainline, branch, path):
     #print "\ncmd =", cmd
     p = subprocess.Popen(cmd, shell=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
     stdoutdata, stderrdata = p.communicate()
+    #sys.stderr.write(stdoutdata)
     sys.stderr.write(stderrdata)
     lines = filter(None,stdoutdata.split('\n'))
     histRegex = re.compile(r"^(?P<action>[\w]+([^\[\]]*[\w]+)?)(\[(?P<data>[^\[\]]*?)( v\. [\d]+)?\])?([\s]+)(?P<author>[\w]+([^\[\]]*[\w]+)?)([\s]+)(?P<version>[\d]+)([\s]+)(?P<timestamp>[\w]+[^\[\]]*)$")
@@ -293,7 +296,6 @@ def process_database_record(record):
             print record.comment
         else:
             print "data 0"
-        print "merge refs/heads/%s" % translate_branch_name(record.branch)
         print "deleteall"
         iterMark = startMark
         for file in files:
@@ -309,9 +311,14 @@ def process_database_record(record):
             print record.comment
         else:
             print "data 0"
+        tagDict[translate_branch_name(record.data)] = mark
     elif record.action == Actions.BRANCH_BASELINE:
         print "reset refs/heads/%s" % translate_branch_name(record.data)
-        print "from refs/heads/%s" % translate_branch_name(record.branch)
+        parentBranch = translate_branch_name(record.branch)
+        if is_snapshot_branch(parentBranch, os.path.split(record.path)[0]):
+            print "from :%d" % tagDict[parentBranch]
+        else:
+            print "from refs/heads/%s" % parentBranch
     elif record.action == Actions.FILE_MODIFY or record.action == Actions.FILE_DELETE or record.action == Actions.FILE_RENAME:
         if record.action == Actions.FILE_MODIFY:
             blobMark = print_blob_for_file(record.branch, record.path, record.version)
@@ -341,7 +348,7 @@ def process_database_record(record):
 def get_next_database_record(database, c):
     if not c:
         c = database.cursor()
-        c.execute('''SELECT * FROM operations ORDER BY timestamp, version ASC''')
+        c.execute('''SELECT * FROM operations ORDER BY timestamp ASC''')
     return c, c.fetchone()
 
 
