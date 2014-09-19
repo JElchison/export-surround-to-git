@@ -283,7 +283,7 @@ def process_database_record(record):
         files = find_all_files_in_branch_under_path(record.mainline, record.data, record.path)
         startMark = None
         for file in files:
-            blobMark = print_blob_for_file(record.branch, file)
+            blobMark = print_blob_for_file(record.data, file)
             if not startMark:
                 startMark = blobMark
         mark = mark + 1
