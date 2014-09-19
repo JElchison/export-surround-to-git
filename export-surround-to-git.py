@@ -410,7 +410,8 @@ def parse_arguments():
     parser = argparse.ArgumentParser(prog='export-surround-to-git.py', description='Exports history from Seapine Surround in a format parseable by `git fast-import`.', formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument('-m', '--mainline', nargs=1, help='Mainline branch containing history to export')
     parser.add_argument('-p', '--path', nargs=1, help='Path containing history to export')
-    parser.add_argument('-f', '--file', nargs=1, help='Any filename in target path')  #TODO auto-generate this
+    # TODO auto-generate this.  need to find SMART way to do it, so that branches without this file don't get left out.
+    parser.add_argument('-f', '--file', nargs=1, help='Any filename in target path')
     parser.add_argument('-d', '--database', nargs=1, help='Path to local database (only used when resuming an export)')
     parser.add_argument('--version', action='version', version='%(prog)s '+VERSION)
     parser.add_argument('command', nargs='?', default='all')
