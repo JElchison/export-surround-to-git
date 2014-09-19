@@ -82,7 +82,6 @@ actionMap = {"add"                   : Actions.FILE_MODIFY,
 class DatabaseRecord:
     def __init__(self, timestamp, action, mainline, branch, path, version, author, comment, data):
         self.timestamp = timestamp
-        print "\nAction =", action
         self.action = action
         self.mainline = mainline
         self.branch = branch
@@ -115,7 +114,7 @@ def find_all_branches_in_mainline_containing_path(mainline, path, file):
     #print "\ncmd =", cmd
     p = subprocess.Popen(cmd, shell=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
     stdoutdata, stderrdata = p.communicate()
-    print stderrdata
+    sys.stderr.write(stderrdata)
     return filter(None,stdoutdata.split('\n'))
 
 
@@ -124,8 +123,7 @@ def find_all_files_in_branch_under_path(mainline, branch, path):
     #print "\ncmd =", cmd
     p = subprocess.Popen(cmd, shell=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
     stdoutdata, stderrdata = p.communicate()
-    print stdoutdata
-    print stderrdata
+    sys.stderr.write(stderrdata)
     lines = filter(None,stdoutdata.split('\n'))
     fileList = []
     for line in lines:
@@ -144,16 +142,12 @@ def is_snapshot_branch(branch, repo):
 
 
 def find_all_file_versions(mainline, branch, path):
-    print "\nmainline =", mainline
-    print "\nbranch =", branch
-    print "\npath =", path
     repo, file = os.path.split(path)
     cmd = 'sscm history "%s" -b"%s" -p"%s" | tail -n +5' % (file, branch, repo)
-    print "\ncmd =", cmd
+    #print "\ncmd =", cmd
     p = subprocess.Popen(cmd, shell=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
     stdoutdata, stderrdata = p.communicate()
-    print stdoutdata
-    print stderrdata
+    sys.stderr.write(stderrdata)
     lines = filter(None,stdoutdata.split('\n'))
     histRegex = re.compile(r"^(?P<action>[\w]+([^\[\]]*[\w]+)?)(\[(?P<data>[^\[\]]*)\])?([\s]+)(?P<author>[\w]+([^\[\]]*[\w]+)?)([\s]+)(?P<version>[\d]+)([\s]+)(?P<timestamp>[\w]+[^\[\]]*)$")
     versionList = []
@@ -191,11 +185,12 @@ def create_database():
 
 def add_record_to_database(record, database):
     c = database.cursor()
-    print "Inserting =", record.get_tuple()
+    #print "Inserting =", record.get_tuple()
     try:
         c.execute('''INSERT INTO operations VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)''', record.get_tuple())
     except sqlite3.IntegrityError as e:
-        print "Detected duplicate record ", e
+        #sys.stderr.write("\nDetected duplicate record %s" % str(record.get_tuple()))
+        pass
     database.commit()
 
 
@@ -212,9 +207,9 @@ def cmd_parse(mainline, path, file, database):
         sys.stderr.write("\nNow servicing branch '%s' ..." % branch)
         files = find_all_files_in_branch_under_path(mainline, branch, path)
         for file in files:
-            sys.stderr.write("\n\tNow servicing file '%s' ..." % file)
+            #sys.stderr.write("\n\tNow servicing file '%s' ..." % file)
             versions = find_all_file_versions(mainline, branch, file)
-            sys.stderr.write("\n\t\tversions = %s" % versions)
+            #sys.stderr.write("\n\t\tversions = %s" % versions)
             for timestamp, action, version, author, comment, data in versions:
                 epoch = int(time.mktime(time.strptime(timestamp, "%m/%d/%Y %I:%M %p")))
                 if action == "add to branch":
@@ -222,12 +217,10 @@ def cmd_parse(mainline, path, file, database):
                         branchAction = Actions.BRANCH_SNAPSHOT
                     else:
                         branchAction = Actions.BRANCH_BASELINE
-                    print "\nbranchAction =", branchAction
                     add_record_to_database(DatabaseRecord(epoch, branchAction, mainline, branch, path, version, author, comment, data), database)
                 else:
-                    print "\naction =", action
-                    print "\nactionMap =", actionMap[action]
-                    add_record_to_database(DatabaseRecord(epoch, actionMap[action], mainline, branch, path+file, version, author, comment, data), database)
+                    add_record_to_database(DatabaseRecord(epoch, actionMap[action], mainline, branch, file, version, author, comment, data), database)
+    sys.stderr.write("\nParsing complete.\n")
 
 
 def print_blob_for_file(branch, path, file, version):
