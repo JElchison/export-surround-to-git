@@ -33,13 +33,18 @@ import time
 import datetime
 import sqlite3
 import os
+import shutil
 
 # TODO pep8
 # TODO pylint
 # TODO spell-check
 # TODO test with python3
 # TODO make exception handlers as specific as possible
+# TODO add verbose comments
+# TODO see other TODOs
 
+
+scratchDir = "scratch/"
 mark = 0
 
 class Actions:
@@ -200,14 +205,15 @@ def add_record_to_database(record, database):
 
 
 def cmd_parse(mainline, path, file, database):
+    sys.stderr.write("[+] Beginning parse phase...")
     branches = find_all_branches_in_mainline_containing_path(mainline, path, file)
     for branch in branches:
-        sys.stderr.write("\nNow servicing branch '%s' ..." % branch)
+        sys.stderr.write("\n[*] Parsing branch '%s' ..." % branch)
         files = find_all_files_in_branch_under_path(mainline, branch, path)
         for file in files:
-            #sys.stderr.write("\n\tNow servicing file '%s' ..." % file)
+            #sys.stderr.write("\n[*] \tParsing file '%s' ..." % file)
             versions = find_all_file_versions(mainline, branch, file)
-            #sys.stderr.write("\n\t\tversions = %s" % versions)
+            #sys.stderr.write("\n[*] \t\tversions = %s" % versions)
             for timestamp, action, version, author, comment, data in versions:
                 epoch = int(time.mktime(time.strptime(timestamp, "%m/%d/%Y %I:%M %p")))
                 if action == "add to branch":
@@ -218,7 +224,7 @@ def cmd_parse(mainline, path, file, database):
                     add_record_to_database(DatabaseRecord((epoch, branchAction, mainline, branch, path, version, author, comment, data)), database)
                 else:
                     add_record_to_database(DatabaseRecord((epoch, actionMap[action], mainline, branch, file, version, author, comment, data)), database)
-    sys.stderr.write("\nParsing complete.\n")
+    sys.stderr.write("\n[+] Parse phase complete")
 
 
 def translate_branch_name(name):
@@ -242,13 +248,10 @@ def translate_branch_name(name):
 def print_blob_for_file(branch, fullPath, version=None):
     global mark
 
-    scratchDir = "scratch/"
     path, file = os.path.split(fullPath)
     localPath = scratchDir + file
-    try:
+    if os.path.isfile(localPath):
         os.remove(localPath)
-    except:
-        pass
     if version:
         cmd = 'sscm get "%s" -b"%s" -p"%s" -d"%s" -f -i -v%d' % (file, branch, path, scratchDir, version)
     else:
@@ -267,7 +270,7 @@ def print_blob_for_file(branch, fullPath, version=None):
 
 def process_database_record(record):
     global mark
-    # TODO how detect this?
+    # TODO how detect local time zone?  does Surround store time in UTC?
     timezone = "-0500"
 
     if record.action == Actions.BRANCH_SNAPSHOT:
@@ -343,6 +346,7 @@ def get_next_database_record(database, c):
 
 
 def cmd_export(database):
+    sys.stderr.write("\n[+] Beginning export phase...\n")
     count = 0
     c, record = get_next_database_record(database, None)
     count = count + 1
@@ -351,8 +355,15 @@ def cmd_export(database):
         c, record = get_next_database_record(database, c)
         count = count + 1
         if count % 10 == 0:
-            print "progress", record[0]
-    # TODO `rm .git/TAG_FIXUP`
+            print "progress", time.strftime('%Y-%m-%d', time.localtime(record[0]))
+
+    # cleanup
+    shutil.rmtree(scratchDir)
+    if os.path.isfile("./.git/TAG_FIXUP"):
+        # TODO why doesn't this work?  is this too early since we're piping our output?
+        os.remove("./.git/TAG_FIXUP")
+
+    sys.stderr.write("\n[+] Export complete.  Your new Git repository is ready to use.\nDon't forget to run `git repack` at some future time to improve data locality and access performance.\n\n")
 
 
 def cmd_verify(database):
@@ -386,13 +397,14 @@ def handle_command(parser):
 
 
 def parse_arguments():
-    parser = argparse.ArgumentParser(prog='export-surround-to-git.py', description='Exports history from Seapine Surround in a format parseable by `git fast-import`.')
+    parser = argparse.ArgumentParser(prog='export-surround-to-git.py', description='Exports history from Seapine Surround in a format parseable by `git fast-import`.', formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument('-m', '--mainline', nargs=1, help='Mainline branch containing history to export')
     parser.add_argument('-p', '--path', nargs=1, help='Path containing history to export')
     parser.add_argument('-f', '--file', nargs=1, help='Any filename in target path')  #TODO auto-generate this
-    parser.add_argument('-d', '--database', nargs=1, help='Path to local database to resume an export')
+    parser.add_argument('-d', '--database', nargs=1, help='Path to local database (only used when resuming an export)')
     parser.add_argument('--version', action='version', version='%(prog)s '+VERSION)
     parser.add_argument('command', nargs='?', default='all')
+    parser.epilog = "Example flow:\n\tsscm setclient ...\n\tgit init my-new-repo\n\tcd my-new-repo\n\texport-surround-to-git.py -m Sandbox -p \"Sandbox/Merge Test\" -f blah.txt | git fast-import --stats --export-marks=marks.txt"
     return parser
 
 
@@ -404,36 +416,3 @@ def main():
 
 if __name__ == "__main__":
     main()
-
-
-'''
-User inputs:
-    * Mainline branch <M>
-    * Repository path <P>
-    * Surround server
-    * Surround server port
-    * Surround username
-    * Surround password
-
-Environment:
-    * Python script
-    * Executed in Bash
-
-Steps:
-    * Find all baseline branches in <M> having <P>
-        * sscm lsbranch -b"<M>" -p"<P>" -f"<file>"
-    * For each baseline/mainline branch <B>
-        * Find all files (including deleted files) in <P>
-            * sscm ls -b"<B>" -p"<P>" (doesn't find deleted files)
-        * For each file <F>
-            * Find all versions of file <F>
-                * sscm history <F> -b"<B>" -p"<P>" -a"<action>"
-            * For each version <V>
-                * Add tuple to table (timestamp, branch, path, file, version, action?)
-    * Walk table in order of timestamp:version
-        * For checkin/merge/rollback/add/delete/rename
-            * Use git fast-import 'commit' command
-        * For snapshot
-            * Use git fast-import 'tag' command with 'deleteall' and "Tag Fixup Branches"
-    * Integrity check:  Verify Git tags are identical to Surround snapshots
-'''
