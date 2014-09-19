@@ -42,6 +42,7 @@ import shutil
 # TODO make exception handlers as specific as possible
 # TODO add verbose comments
 # TODO look for other efficiency gainers, like calling translate_branch_name multiple times in same function
+# TODO find way to get better granularity on timestamps outputted by sscm history command.  we needs seconds!
 # TODO see other TODOs
 
 
@@ -348,6 +349,8 @@ def process_database_record(record):
 def get_next_database_record(database, c):
     if not c:
         c = database.cursor()
+        # TODO this is a temporary hack until we can get granularity of seconds in the timestamp field
+        #c.execute('''SELECT * FROM operations ORDER BY timestamp, version ASC''')
         c.execute('''SELECT * FROM operations ORDER BY timestamp ASC''')
     return c, c.fetchone()
 
