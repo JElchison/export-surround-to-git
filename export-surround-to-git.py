@@ -331,7 +331,7 @@ def cmd_export(database):
         c, record = get_next_database_record(database, c)
         count = count + 1
         if count % 10 == 0:
-            print "progress", record.timestamp
+            print "progress", record[0]
     # TODO `rm .git/TAG_FIXUP`
 
 
