@@ -32,6 +32,7 @@ import re
 import time
 import datetime
 import sqlite3
+import os
 
 # TODO pep8
 # TODO pylint
@@ -46,7 +47,8 @@ class Actions:
     FILE_DELETE = 4
     FILE_RENAME = 5
 
-actionMap = {"add to repository"     : Actions.FILE_MODIFY,
+actionMap = {"add"                   : Actions.FILE_MODIFY,
+             "add to repository"     : Actions.FILE_MODIFY,
              "add to branch"         : None,
              "add from branch"       : Actions.FILE_MODIFY,
              "attach to issue"       : None,  # TODO
@@ -55,6 +57,7 @@ actionMap = {"add to repository"     : Actions.FILE_MODIFY,
              "attach to external"    : None,  # TODO
              "break share"           : None,
              "checkin"               : Actions.FILE_MODIFY,
+             "delete"                : Actions.FILE_DELETE,
              "duplicate"             : Actions.FILE_MODIFY,  # TODO verify this
              "file destroyed"        : Actions.FILE_DELETE,
              "file moved"            : Actions.FILE_RENAME,
@@ -62,6 +65,7 @@ actionMap = {"add to repository"     : Actions.FILE_MODIFY,
              "label"                 : None,  # TODO
              "promote"               : None,
              "promote from"          : Actions.FILE_MODIFY,
+             "promote to"            : Actions.FILE_MODIFY,
              "rebase from"           : Actions.FILE_MODIFY,
              "rebase with merge"     : Actions.FILE_MODIFY,
              "remove"                : Actions.FILE_DELETE,
@@ -76,8 +80,9 @@ actionMap = {"add to repository"     : Actions.FILE_MODIFY,
 
 
 class DatabaseRecord:
-    def DatabaseRecord(self, timestamp, action, mainline, branch, path, version, author, comment, data):
+    def __init__(self, timestamp, action, mainline, branch, path, version, author, comment, data):
         self.timestamp = timestamp
+        print "\nAction =", action
         self.action = action
         self.mainline = mainline
         self.branch = branch
@@ -87,7 +92,7 @@ class DatabaseRecord:
         self.comment = comment
         self.data = data
 
-    def get_tuple():
+    def get_tuple(self):
         return (self.timestamp, self.action, self.mainline, self.branch, self.path, self.version, self.author, self.comment, self.data)
 
 
@@ -107,15 +112,20 @@ def verify_git_environment():
 
 def find_all_branches_in_mainline_containing_path(mainline, path, file):
     cmd = 'sscm lsbranch -b"%s" -p"%s" -f"%s" | sed -r \'s/ \((baseline|mainline|snapshot)\)$//g\'' % (mainline, path, file)
+    #print "\ncmd =", cmd
     p = subprocess.Popen(cmd, shell=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
     stdoutdata, stderrdata = p.communicate()
+    print stderrdata
     return filter(None,stdoutdata.split('\n'))
 
 
 def find_all_files_in_branch_under_path(mainline, branch, path):
     cmd = 'sscm ls -b"%s" -p"%s" -r | grep -v \'Total listed files\' | sed -r \'s/unknown status.*$//g\'' % (branch, path)
+    #print "\ncmd =", cmd
     p = subprocess.Popen(cmd, shell=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
     stdoutdata, stderrdata = p.communicate()
+    print stdoutdata
+    print stderrdata
     lines = filter(None,stdoutdata.split('\n'))
     fileList = []
     for line in lines:
@@ -126,27 +136,40 @@ def find_all_files_in_branch_under_path(mainline, branch, path):
     return fileList
 
 
-def find_all_file_versions(branch, path, file):
-    cmd = 'sscm history "%s" -b"%s" -p"%s" | tail -n +5' % (file, branch, path)
+def is_snapshot_branch(branch, repo):
+    cmd = 'sscm bp -b"%s" -p"%s"' % (branch, repo)
+    with open(os.devnull, 'w') as fnull:
+        result = subprocess.Popen(cmd, shell=True, stdout=subprocess.PIPE, stderr=fnull).communicate()[0]
+    return result.find("snapshot") != -1
+
+
+def find_all_file_versions(mainline, branch, path):
+    print "\nmainline =", mainline
+    print "\nbranch =", branch
+    print "\npath =", path
+    repo, file = os.path.split(path)
+    cmd = 'sscm history "%s" -b"%s" -p"%s" | tail -n +5' % (file, branch, repo)
+    print "\ncmd =", cmd
     p = subprocess.Popen(cmd, shell=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
     stdoutdata, stderrdata = p.communicate()
+    print stdoutdata
+    print stderrdata
     lines = filter(None,stdoutdata.split('\n'))
+    histRegex = re.compile(r"^(?P<action>[\w]+([^\[\]]*[\w]+)?)(\[(?P<data>[^\[\]]*)\])?([\s]+)(?P<author>[\w]+([^\[\]]*[\w]+)?)([\s]+)(?P<version>[\d]+)([\s]+)(?P<timestamp>[\w]+[^\[\]]*)$")
     versionList = []
     bFoundOne = False
     for line in lines:
-        # TODO compile this RE once, before the loop (for efficiency)
-        result = re.search(r"^([\w]+(.*[\w]+)?)(\[(.*)\])?(\t|[ ]{2,})([\w]+(.*[\w]+)?)(\t|[ ]{2,})([\d]+)(\t|[ ]{2,})([\w]+.*)$", line)
+        result = histRegex.search(line)
         if result:
             if bFoundOne:
-                # TODO why isn't the below line simply after the "data =" line below?  seems unnecessarily complex.
                 versionList.append((timestamp, action, int(version), author, comment, data))
             bFoundOne = True
-            action = result.group(1)
-            author = result.group(6)
-            version = result.group(9)
-            timestamp = result.group(11)
+            action = result.group("action")
+            author = result.group("author")
+            version = result.group("version")
+            timestamp = result.group("timestamp")
             comment = None
-            data = result.group(4)
+            data = result.group("data")
         else:
             if not comment:
                 comment = re.sub("^ Comments \- ", "", line, count=1)
@@ -161,14 +184,18 @@ def create_database():
     name = datetime.datetime.fromtimestamp(time.time()).strftime('%Y%m%d%H%M%S') + '.db'
     database = sqlite3.connect(name)
     c = database.cursor()
-    c.execute('''CREATE TABLE operations (timestamp INTEGER NOT NULL, action TEXT NOT NULL, mainline TEXT NOT NULL, branch TEXT NOT NULL, path TEXT, version INTEGER, data TEXT, PRIMARY KEY(action, mainline, branch, path, version, data))''')
+    c.execute('''CREATE TABLE operations (timestamp INTEGER NOT NULL, action INTEGER NOT NULL, mainline TEXT NOT NULL, branch TEXT NOT NULL, path TEXT, version INTEGER, author TEXT, comment TEXT, data TEXT, PRIMARY KEY(action, mainline, branch, path, version, author, comment, data))''')
     database.commit()
     return database 
 
 
 def add_record_to_database(record, database):
     c = database.cursor()
-    c.execute('''INSERT INTO operations VALUES (?, ?, ?, ?, ?, ?, ?)''', record.get_tuple())
+    print "Inserting =", record.get_tuple()
+    try:
+        c.execute('''INSERT INTO operations VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)''', record.get_tuple())
+    except sqlite3.IntegrityError as e:
+        print "Detected duplicate record ", e
     database.commit()
 
 
@@ -185,17 +212,22 @@ def cmd_parse(mainline, path, file, database):
         sys.stderr.write("\nNow servicing branch '%s' ..." % branch)
         files = find_all_files_in_branch_under_path(mainline, branch, path)
         for file in files:
-            versions = find_all_file_versions(mainline, branch, path+file)
+            sys.stderr.write("\n\tNow servicing file '%s' ..." % file)
+            versions = find_all_file_versions(mainline, branch, file)
+            sys.stderr.write("\n\t\tversions = %s" % versions)
             for timestamp, action, version, author, comment, data in versions:
-                epoch = int(time.mktime(time.strptime(timestamp, "%m/%d/%y %I:%M %p")))
-                if action == "AddToBranch":
-                    if is_snapshot_branch(data):
+                epoch = int(time.mktime(time.strptime(timestamp, "%m/%d/%Y %I:%M %p")))
+                if action == "add to branch":
+                    if is_snapshot_branch(data, os.path.split(file)[0]):
                         branchAction = Actions.BRANCH_SNAPSHOT
                     else:
                         branchAction = Actions.BRANCH_BASELINE
-                    add_record_to_database(DatabaseRecord(epoch, branchAction, mainline, branch, path, version, author, comment, data))
+                    print "\nbranchAction =", branchAction
+                    add_record_to_database(DatabaseRecord(epoch, branchAction, mainline, branch, path, version, author, comment, data), database)
                 else:
-                    add_record_to_database(DatabaseRecord(epoch, actionMap[action], mainline, branch, path+file, version, author, comment, data))
+                    print "\naction =", action
+                    print "\nactionMap =", actionMap[action]
+                    add_record_to_database(DatabaseRecord(epoch, actionMap[action], mainline, branch, path+file, version, author, comment, data), database)
 
 
 def print_blob_for_file(branch, path, file, version):
@@ -289,13 +321,17 @@ def cmd_export(database):
     # TODO `rm .git/TAG_FIXUP`
 
 
+def cmd_verify(database):
+    # TODO
+    pass
+
+
 def handle_command(parser):
     args = parser.parse_args()
 
     if args.command == "parse" and args.mainline and args.path and args.file:
         verify_surround_environment()
         database = create_database()
-        # TODO why are [0] required?
         cmd_parse(args.mainline[0], args.path[0], args.file[0], database)
     elif args.command == "export" and args.database:
         verify_git_environment()
@@ -309,7 +345,7 @@ def handle_command(parser):
         database = create_database()
         cmd_parse(args.mainline[0], args.path[0], args.file[0], database)
         cmd_export(database)
-        cmd_verify(args.database[0])
+        cmd_verify(database)
     else:
         parser.print_help()
         sys.exit(1)
