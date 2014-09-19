@@ -38,7 +38,9 @@ import os
 # TODO pylint
 # TODO spell-check
 # TODO test with python3
+# TODO make exception handlers as specific as possible
 
+mark = 0
 
 class Actions:
     BRANCH_SNAPSHOT = 1
@@ -80,7 +82,10 @@ actionMap = {"add"                   : Actions.FILE_MODIFY,
 
 
 class DatabaseRecord:
-    def __init__(self, timestamp, action, mainline, branch, path, version, author, comment, data):
+    def __init__(self, tuple):
+        self.init(tuple[0], tuple[1], tuple[2], tuple[3], tuple[4], tuple[5], tuple[6], tuple[7], tuple[8])
+
+    def init(self, timestamp, action, mainline, branch, path, version, author, comment, data):
         self.timestamp = timestamp
         self.action = action
         self.mainline = mainline
@@ -194,13 +199,6 @@ def add_record_to_database(record, database):
     database.commit()
 
 
-def get_next_database_record(database, c):
-    if not c:
-        c = database.cursor()
-    c.execute('''SELECT * FROM operations ORDER BY timestamp, version ASC''')
-    return c, c.fetchone()
-
-
 def cmd_parse(mainline, path, file, database):
     branches = find_all_branches_in_mainline_containing_path(mainline, path, file)
     for branch in branches:
@@ -217,51 +215,60 @@ def cmd_parse(mainline, path, file, database):
                         branchAction = Actions.BRANCH_SNAPSHOT
                     else:
                         branchAction = Actions.BRANCH_BASELINE
-                    add_record_to_database(DatabaseRecord(epoch, branchAction, mainline, branch, path, version, author, comment, data), database)
+                    add_record_to_database(DatabaseRecord((epoch, branchAction, mainline, branch, path, version, author, comment, data)), database)
                 else:
-                    add_record_to_database(DatabaseRecord(epoch, actionMap[action], mainline, branch, file, version, author, comment, data), database)
+                    add_record_to_database(DatabaseRecord((epoch, actionMap[action], mainline, branch, file, version, author, comment, data)), database)
     sys.stderr.write("\nParsing complete.\n")
 
 
-def print_blob_for_file(branch, path, file, version):
-    scratchDir = "scratch"
-    # TODO following line isn't right (not enough format specifiers); need path join operation?
-    os.remove("%s" % (scratchDir, file))
-    cmd = 'sscm get "%s" -b"%s" -p"%s" -d"%s" -f -i -v%d' % (file, branch, scratchDir, version)
-    subprocess.check_call(cmd, shell=True)
+def print_blob_for_file(branch, fullPath, version=None):
+    global mark
+
+    scratchDir = "scratch/"
+    path, file = os.path.split(fullPath)
+    localPath = scratchDir + file
+    try:
+        os.remove(localPath)
+    except:
+        pass
+    if version:
+        cmd = 'sscm get "%s" -b"%s" -p"%s" -d"%s" -f -i -v%d' % (file, branch, path, scratchDir, version)
+    else:
+        cmd = 'sscm get "%s" -b"%s" -p"%s" -d"%s" -f -i' % (file, branch, path, scratchDir)
+    with open(os.devnull, 'w') as fnull:
+        subprocess.Popen(cmd, shell=True, stdout=fnull, stderr=fnull).communicate()
 
     mark = mark + 1
     print "blob"
     print "mark :%d" % mark
-    with open(path, "rb") as f:
-        f.seek(os.SEEK_END)
-        fileSize = f.tell()
-        print "data %d" % fileSize
-        f.seek(os.SEEK_SET)
+    print "data %d" % os.path.getsize(localPath)
+    with open(localPath, "rb") as f:
         print f.read()
     print
     return mark
 
 
 def process_database_record(record):
+    global mark
+
     if record.action == Actions.BRANCH_SNAPSHOT:
-        # TODO below is missing format specifier
-        print "reset TAG_FIXUP" % record.data
+        print "reset TAG_FIXUP"
         print "from %s" % record.branch
         print
-        files = find_all_files_in_branch_under_path(mainline, branch, path)
+        files = find_all_files_in_branch_under_path(record.mainline, record.data, record.path)
+        startMark = None
         for file in files:
-            blobMark = print_blob_for_file(file)
+            blobMark = print_blob_for_file(record.branch, file)
             if not startMark:
                 startMark = blobMark
         mark = mark + 1
-        # TODO below is missing format specifier
-        print "commit TAG_FIXUP" % record.branch
+        print "commit TAG_FIXUP"
         print "mark :%d" % mark
         print "author %s %s" % (record.author, record.timestamp)
         print "committer %s %s" % (record.author, record.timestamp)
-        print "data %d" % len(record.comment)
-        print record.comment
+        if record.comment:
+            print "data %d" % len(record.comment)
+            print record.comment
         print "from TAG_FIXUP"
         print "merge %s" % record.branch
         print "deleteall"
@@ -275,23 +282,25 @@ def process_database_record(record):
         print "tag %s" % record.data
         print "from TAG_FIXUP"
         print "tagger %s %s" % (record.author, record.timestamp)
-        print "data %d" % len(record.comment)
-        print record.comment
+        if record.comment:
+            print "data %d" % len(record.comment)
+            print record.comment
         print
-    if record.action == Actions.BRANCH_BASELINE:
+    elif record.action == Actions.BRANCH_BASELINE:
         print "reset refs/heads/%s" % record.data
         print "from %s" % record.branch
         print
-    if record.action == Actions.FILE_MODIFY or record.action == Actions.FILE_DELETE or record.action == Actions.FILE_RENAME:
+    elif record.action == Actions.FILE_MODIFY or record.action == Actions.FILE_DELETE or record.action == Actions.FILE_RENAME:
         if record.action == Actions.FILE_MODIFY:
-            blobMark = print_blob_for_file(record.path)
+            blobMark = print_blob_for_file(record.branch, record.path, record.version)
         mark = mark + 1
         print "commit refs/heads/%s" % record.branch
         print "mark :%d" % mark
         print "author %s %s" % (record.author, record.timestamp)
         print "committer %s %s" % (record.author, record.timestamp)
-        print "data %d" % len(record.comment)
-        print record.comment
+        if record.comment:
+            print "data %d" % len(record.comment)
+            print record.comment
         print "from %s" % record.branch
         if record.data:
             print "merge %s" % record.data
@@ -306,11 +315,23 @@ def process_database_record(record):
         raise Exception("Unknown record action")
 
 
+def get_next_database_record(database, c):
+    if not c:
+        c = database.cursor()
+        c.execute('''SELECT * FROM operations ORDER BY timestamp, version ASC''')
+    return c, c.fetchone()
+
+
 def cmd_export(database):
+    count = 0
     c, record = get_next_database_record(database, None)
+    count = count + 1
     while (record):
-        process_database_record(record)
+        process_database_record(DatabaseRecord(record))
         c, record = get_next_database_record(database, c)
+        count = count + 1
+        if count % 10 == 0:
+            print "progress", record.timestamp
     # TODO `rm .git/TAG_FIXUP`
 
 
