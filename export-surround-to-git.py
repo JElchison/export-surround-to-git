@@ -52,14 +52,6 @@ timezone = "-0500"
 # keeps track of snapshot name --> mark number pairing
 tagDict = {}
 
-# actions enumeration
-class Actions:
-    BRANCH_SNAPSHOT = 1
-    BRANCH_BASELINE = 2
-    FILE_MODIFY = 3
-    FILE_DELETE = 4
-    FILE_RENAME = 5
-
 # map between Surround action and Action enum
 actionMap = {"add"                   : Actions.FILE_MODIFY,
              "add to repository"     : Actions.FILE_MODIFY,
@@ -96,6 +88,15 @@ actionMap = {"add"                   : Actions.FILE_MODIFY,
 #
 # classes
 #
+
+# actions enumeration
+class Actions:
+    BRANCH_SNAPSHOT = 1
+    BRANCH_BASELINE = 2
+    FILE_MODIFY = 3
+    FILE_DELETE = 4
+    FILE_RENAME = 5
+
 
 class DatabaseRecord:
     def __init__(self, tuple):
@@ -135,7 +136,7 @@ def find_all_branches_in_mainline_containing_path(mainline, path, file):
     p = subprocess.Popen(cmd, shell=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
     stdoutdata, stderrdata = p.communicate()
     sys.stderr.write(stderrdata)
-    return filter(None,stdoutdata.split('\n'))
+    return filter(None, stdoutdata.split('\n'))
 
 
 def find_all_files_in_branch_under_path(mainline, branch, path):
@@ -144,7 +145,7 @@ def find_all_files_in_branch_under_path(mainline, branch, path):
     p = subprocess.Popen(cmd, shell=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
     stdoutdata, stderrdata = p.communicate()
     sys.stderr.write(stderrdata)
-    lines = filter(None,stdoutdata.split('\n'))
+    lines = filter(None, stdoutdata.split('\n'))
 
     # directories are listed on their own line, before a section of their files
     fileList = []
@@ -173,7 +174,7 @@ def find_all_file_versions(mainline, branch, path):
     stdoutdata, stderrdata = p.communicate()
     #sys.stderr.write(stdoutdata)
     sys.stderr.write(stderrdata)
-    lines = filter(None,stdoutdata.split('\n'))
+    lines = filter(None, stdoutdata.split('\n'))
 
     # for efficiency, compile the regex once beforehand
     histRegex = re.compile(r"^(?P<action>[\w]+([^\[\]]*[\w]+)?)(\[(?P<data>[^\[\]]*?)( v\. [\d]+)?\])?([\s]+)(?P<author>[\w]+([^\[\]]*[\w]+)?)([\s]+)(?P<version>[\d]+)([\s]+)(?P<timestamp>[\w]+[^\[\]]*)$")
@@ -220,7 +221,7 @@ def create_database():
     # we intentionally avoid duplicates via the PRIMARY KEY
     c.execute('''CREATE TABLE operations (timestamp INTEGER NOT NULL, action INTEGER NOT NULL, mainline TEXT NOT NULL, branch TEXT NOT NULL, path TEXT, version INTEGER, author TEXT, comment TEXT, data TEXT, PRIMARY KEY(action, mainline, branch, path, version, author, comment, data))''')
     database.commit()
-    return database 
+    return database
 
 
 def add_record_to_database(record, database):
@@ -426,7 +427,7 @@ def process_database_record(record):
         if record.data:
             # this is a branch operation.  record the other ancestor.
             print "merge refs/heads/%s" % translate_branch_name(record.data)
-        if record.action == Actions.FILE_MODIFY: 
+        if record.action == Actions.FILE_MODIFY:
             print "M 100644 :%d %s" % (blobMark, record.path)
         elif record.action == Actions.FILE_DELETE:
             print "D %s" % record.path
@@ -513,7 +514,7 @@ def parse_arguments():
     # TODO auto-generate this.  need to find SMART way to do it, so that branches without this file don't get left out.
     parser.add_argument('-f', '--file', nargs=1, help='Any filename in target path')
     parser.add_argument('-d', '--database', nargs=1, help='Path to local database (only used when resuming an export)')
-    parser.add_argument('--version', action='version', version='%(prog)s '+VERSION)
+    parser.add_argument('--version', action='version', version='%(prog)s ' + VERSION)
     parser.add_argument('command', nargs='?', default='all')
     parser.epilog = "Example flow:\n\tsscm setclient ...\n\tgit init my-new-repo\n\tcd my-new-repo\n\texport-surround-to-git.py -m Sandbox -p \"Sandbox/Merge Test\" -f blah.txt | git fast-import --stats --export-marks=marks.txt"
     return parser
