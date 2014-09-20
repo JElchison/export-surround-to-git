@@ -52,6 +52,14 @@ timezone = "-0500"
 # keeps track of snapshot name --> mark number pairing
 tagDict = {}
 
+# actions enumeration
+class Actions:
+    BRANCH_SNAPSHOT = 1
+    BRANCH_BASELINE = 2
+    FILE_MODIFY = 3
+    FILE_DELETE = 4
+    FILE_RENAME = 5
+
 # map between Surround action and Action enum
 actionMap = {"add"                   : Actions.FILE_MODIFY,
              "add to repository"     : Actions.FILE_MODIFY,
@@ -88,15 +96,6 @@ actionMap = {"add"                   : Actions.FILE_MODIFY,
 #
 # classes
 #
-
-# actions enumeration
-class Actions:
-    BRANCH_SNAPSHOT = 1
-    BRANCH_BASELINE = 2
-    FILE_MODIFY = 3
-    FILE_DELETE = 4
-    FILE_RENAME = 5
-
 
 class DatabaseRecord:
     def __init__(self, tuple):
@@ -303,7 +302,7 @@ def translate_branch_name(name):
     # 8. cannot contain a sequence @{
     name = name.replace("@{", "__")
     # 9. cannot be the single character @
-    if name = "@":
+    if name == "@":
         name = "_"
 
     return name
