@@ -42,6 +42,9 @@ import shutil
 # temp directory in cwd, holds files fetched from Surround
 scratchDir = "scratch/"
 
+# for efficiency, compile the history regex once beforehand
+histRegex = re.compile(r"^(?P<action>[\w]+([^\[\]]*[\w]+)?)(\[(?P<data>[^\[\]]*?)( v\. [\d]+)?\])?([\s]+)(?P<author>[\w]+([^\[\]]*[\w]+)?)([\s]+)(?P<version>[\d]+)([\s]+)(?P<timestamp>[\w]+[^\[\]]*)$")
+
 # global "mark" number.  incremented before used, as 1 is minimum value allowed.
 mark = 0
 
@@ -174,9 +177,6 @@ def find_all_file_versions(mainline, branch, path):
     #sys.stderr.write(stdoutdata)
     sys.stderr.write(stderrdata)
     lines = filter(None, stdoutdata.split('\n'))
-
-    # for efficiency, compile the regex once beforehand
-    histRegex = re.compile(r"^(?P<action>[\w]+([^\[\]]*[\w]+)?)(\[(?P<data>[^\[\]]*?)( v\. [\d]+)?\])?([\s]+)(?P<author>[\w]+([^\[\]]*[\w]+)?)([\s]+)(?P<version>[\d]+)([\s]+)(?P<timestamp>[\w]+[^\[\]]*)$")
 
     # this is complicated because the comment for a check-in will be on the line *following* a regex match
     versionList = []
