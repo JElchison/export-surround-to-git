@@ -22,7 +22,19 @@
 
 VERSION = '0.5.0'
 
-# Environment:  Assumes running in Bash version TODO.  Assumes sscm client version TODO.
+# Environment:  For now, this script requires:
+#   * Python 2.7 (in path)
+#   * Bash (in path)
+#   * sscm command-line client (in path)
+#   * git (in path)
+
+# Last tested using:
+#   * Python 2.7.6
+#   * GNU bash, version 4.3.11(1)-release (i686-pc-linux-gnu)
+#   * sscm command-line client version:  2013.0.0 Build 23 (Linux)
+#   * git version 1.9.1
+#   * Ubuntu 14.04.1 LTS
+#   * Linux 3.13.0-35-generic #62-Ubuntu SMP Fri Aug 15 01:58:01 UTC 2014 i686 i686 i686 GNU/Linux
 
 
 import sys
