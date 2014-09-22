@@ -138,22 +138,24 @@ def verify_surround_environment():
     pass
 
 
+def get_lines_from_sscm_cmd(sscm_cmd):
+    # helper function to clean each item on a line since sscm has lots of newlines
+    p = subprocess.Popen(sscm_cmd, shell=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+    stdoutdata, stderrdata = p.communicate()
+    sys.stderr.write(stderrdata)
+    return [real_line for real_line in stdoutdata.split('\n') if real_line]
+
+
 def find_all_branches_in_mainline_containing_path(mainline, path, file):
     # pull out lines from `lsbranch` that are of type baseline, mainline, or snapshot
     cmd = 'sscm lsbranch -b"%s" -p"%s" -f"%s" | sed -r \'s/ \((baseline|mainline|snapshot)\)$//g\'' % (mainline, path, file)
-    p = subprocess.Popen(cmd, shell=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
-    stdoutdata, stderrdata = p.communicate()
-    sys.stderr.write(stderrdata)
-    return filter(None, stdoutdata.split('\n'))
+    return get_lines_from_sscm_cmd(cmd)
 
 
 def find_all_files_in_branch_under_path(mainline, branch, path):
     # use all lines from `ls` except for a few
     cmd = 'sscm ls -b"%s" -p"%s" -r | grep -v \'Total listed files\' | sed -r \'s/unknown status.*$//g\'' % (branch, path)
-    p = subprocess.Popen(cmd, shell=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
-    stdoutdata, stderrdata = p.communicate()
-    sys.stderr.write(stderrdata)
-    lines = filter(None, stdoutdata.split('\n'))
+    lines = get_lines_from_sscm_cmd(cmd)
 
     # directories are listed on their own line, before a section of their files
     fileList = []
@@ -178,11 +180,7 @@ def find_all_file_versions(mainline, branch, path):
     repo, file = os.path.split(path)
 
     cmd = 'sscm history "%s" -b"%s" -p"%s" | tail -n +5' % (file, branch, repo)
-    p = subprocess.Popen(cmd, shell=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
-    stdoutdata, stderrdata = p.communicate()
-    #sys.stderr.write(stdoutdata)
-    sys.stderr.write(stderrdata)
-    lines = filter(None, stdoutdata.split('\n'))
+    lines = get_lines_from_sscm_cmd(cmd)
 
     # this is complicated because the comment for a check-in will be on the line *following* a regex match
     versionList = []
@@ -332,11 +330,11 @@ def print_blob_for_file(branch, fullPath, version=None):
         subprocess.Popen(cmd, shell=True, stdout=fnull, stderr=fnull).communicate()
 
     mark = mark + 1
-    print "blob"
-    print "mark :%d" % mark
-    print "data %d" % os.path.getsize(localPath)
+    print("blob")
+    print("mark :%d" % mark)
+    print("data %d" % os.path.getsize(localPath))
     with open(localPath, "rb") as f:
-        print f.read()
+        print(f.read())
     return mark
 
 
@@ -348,10 +346,10 @@ def process_database_record(record):
         # this is necessary since Surround version-controls individual files, and Git controls the state of the entire branch.
         # the purpose of this commit it to bring the branch state to match the snapshot exactly.
 
-        print "reset TAG_FIXUP"
-        print "from refs/heads/%s" % translate_branch_name(record.branch)
+        print("reset TAG_FIXUP")
+        print("from refs/heads/%s" % translate_branch_name(record.branch))
         # TODO following line may not be necessary
-        print
+        print()
 
         # get all files contained within snapshot
         files = find_all_files_in_branch_under_path(record.mainline, record.data, record.path)
@@ -363,36 +361,36 @@ def process_database_record(record):
                 startMark = blobMark
 
         mark = mark + 1
-        print "commit TAG_FIXUP"
-        print "mark :%d" % mark
+        print("commit TAG_FIXUP")
+        print("mark :%d" % mark)
         # we don't have the legit email addresses, so we just use the author as the email address
-        print "author %s <%s> %s %s" % (record.author, record.author, record.timestamp, timezone)
-        print "committer %s <%s> %s %s" % (record.author, record.author, record.timestamp, timezone)
+        print("author %s <%s> %s %s" % (record.author, record.author, record.timestamp, timezone))
+        print("committer %s <%s> %s %s" % (record.author, record.author, record.timestamp, timezone))
         if record.comment:
-            print "data %d" % len(record.comment)
-            print record.comment
+            print("data %d" % len(record.comment))
+            print(record.comment)
         else:
-            print "data 0"
+            print("data 0")
 
         # 'deleteall' tells Git to forget about previous branch state
-        print "deleteall"
+        print("deleteall")
         # replay branch state from above-recorded marks
         iterMark = startMark
         for file in files:
-            print "M 100644 :%d %s" % (iterMark, file)
+            print("M 100644 :%d %s" % (iterMark, file))
             iterMark = iterMark + 1
         if iterMark != mark:
             raise Exception("Marks fell out of sync while tagging '%s'." % record.data)
 
         # finally, tag our result
-        print "tag %s" % translate_branch_name(record.data)
-        print "from TAG_FIXUP"
-        print "tagger %s <%s> %s %s" % (record.author, record.author, record.timestamp, timezone)
+        print("tag %s" % translate_branch_name(record.data))
+        print("from TAG_FIXUP")
+        print("tagger %s <%s> %s %s" % (record.author, record.author, record.timestamp, timezone))
         if record.comment:
-            print "data %d" % len(record.comment)
-            print record.comment
+            print("data %d" % len(record.comment))
+            print(record.comment)
         else:
-            print "data 0"
+            print("data 0")
 
         # save off the mapping between the tag name and the tag mark
         tagDict[translate_branch_name(record.data)] = mark
@@ -400,17 +398,17 @@ def process_database_record(record):
     elif record.action == Actions.BRANCH_BASELINE:
         # the idea hers is to simply 'reset' to create our new branch, the name of which is contained in the 'data' field
 
-        print "reset refs/heads/%s" % translate_branch_name(record.data)
+        print("reset refs/heads/%s" % translate_branch_name(record.data))
 
         parentBranch = translate_branch_name(record.branch)
         if is_snapshot_branch(parentBranch, os.path.split(record.path)[0]):
             # Git won't let us refer to the tag directly (maybe this will be fixed in a future version).
             # for now, we have to refer to the associated tag mark instead.
             # (if this is fixed in the future, we can get rid of tagDict altogether)
-            print "from :%d" % tagDict[parentBranch]
+            print("from :%d" % tagDict[parentBranch])
         else:
             # baseline branch
-            print "from refs/heads/%s" % parentBranch
+            print("from refs/heads/%s" % parentBranch)
 
     elif record.action == Actions.FILE_MODIFY or record.action == Actions.FILE_DELETE or record.action == Actions.FILE_RENAME:
         # this is the usual case
@@ -419,26 +417,26 @@ def process_database_record(record):
             blobMark = print_blob_for_file(record.branch, record.path, record.version)
 
         mark = mark + 1
-        print "commit refs/heads/%s" % translate_branch_name(record.branch)
-        print "mark :%d" % mark
-        print "author %s <%s> %s %s" % (record.author, record.author, record.timestamp, timezone)
-        print "committer %s <%s> %s %s" % (record.author, record.author, record.timestamp, timezone)
+        print("commit refs/heads/%s" % translate_branch_name(record.branch))
+        print("mark :%d" % mark)
+        print("author %s <%s> %s %s" % (record.author, record.author, record.timestamp, timezone))
+        print("committer %s <%s> %s %s" % (record.author, record.author, record.timestamp, timezone))
         if record.comment:
-            print "data %d" % len(record.comment)
-            print record.comment
+            print("data %d" % len(record.comment))
+            print(record.comment)
         else:
-            print "data 0"
+            print("data 0")
 
         if record.data:
             # this is a branch operation.  record the other ancestor.
-            print "merge refs/heads/%s" % translate_branch_name(record.data)
+            print("merge refs/heads/%s" % translate_branch_name(record.data))
         if record.action == Actions.FILE_MODIFY:
-            print "M 100644 :%d %s" % (blobMark, record.path)
+            print("M 100644 :%d %s" % (blobMark, record.path))
         elif record.action == Actions.FILE_DELETE:
-            print "D %s" % record.path
+            print("D %s" % record.path)
         elif record.action == Actions.FILE_RENAME:
-            print "R %s %s" % (record.path, record.data)
-        print
+            print("R %s %s" % (record.path, record.data))
+        print()
     else:
         raise Exception("Unknown record action")
 
@@ -468,7 +466,7 @@ def cmd_export(database):
         # print progress every 10 operations
         if count % 10 == 0:
             # just print the date we're currently servicing
-            print "progress", time.strftime('%Y-%m-%d', time.localtime(record[0]))
+            print("progress", time.strftime('%Y-%m-%d', time.localtime(record[0])))
 
     # cleanup
     shutil.rmtree(scratchDir)
