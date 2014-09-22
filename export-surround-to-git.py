@@ -2,7 +2,7 @@
 
 # export-surround-to-git.py
 #
-# Python script to export history from Seapine Surround in a format parseable by `git fast-import`.
+# Python script to export history from Seapine Surround in a format parseable by `git fast-import`
 #
 # Copyright (C) 2014 Jonathan Elchison <JElchison@gmail.com>
 #
@@ -23,10 +23,9 @@
 VERSION = '0.5.0'
 
 # Environment:  For now, this script requires:
-#   * Python 2.7 (in path)
-#   * Bash (in path)
+#   * Python 2.7
+#   * Bash
 #   * sscm command-line client (in path)
-#   * git (in path)
 
 # Last tested using:
 #   * Python 2.7.6
@@ -46,6 +45,7 @@ import datetime
 import sqlite3
 import os
 import shutil
+
 
 #
 # globals
@@ -135,12 +135,6 @@ def verify_surround_environment():
     # TODO ensure sscm is in PATH and correct version
     # TODO ensure username, password, server, and port are already cached
     # sscm version
-    pass
-
-
-def verify_git_environment():
-    # TODO ensure git is in PATH and correct version
-    # git --version
     pass
 
 
@@ -500,15 +494,12 @@ def handle_command(parser):
         cmd_parse(args.mainline[0], args.path[0], args.file[0], database)
     elif args.command == "export" and args.database:
         verify_surround_environment()
-        verify_git_environment()
         cmd_export(args.database[0])
     elif args.command == "verify" and args.database:
         verify_surround_environment()
-        verify_git_environment()
         cmd_verify(args.database[0])
     elif args.command == "all" and args.mainline and args.path and args.file:
         verify_surround_environment()
-        verify_git_environment()
         database = create_database()
         cmd_parse(args.mainline[0], args.path[0], args.file[0], database)
         cmd_export(database)
