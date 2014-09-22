@@ -54,6 +54,9 @@ import shutil
 # temp directory in cwd, holds files fetched from Surround
 scratchDir = "scratch/"
 
+# for efficiency, compile the history regex once beforehand
+histRegex = re.compile(r"^(?P<action>[\w]+([^\[\]]*[\w]+)?)(\[(?P<data>[^\[\]]*?)( v\. [\d]+)?\])?([\s]+)(?P<author>[\w]+([^\[\]]*[\w]+)?)([\s]+)(?P<version>[\d]+)([\s]+)(?P<timestamp>[\w]+[^\[\]]*)$")
+
 # global "mark" number.  incremented before used, as 1 is minimum value allowed.
 mark = 0
 
@@ -186,9 +189,6 @@ def find_all_file_versions(mainline, branch, path):
     #sys.stderr.write(stdoutdata)
     sys.stderr.write(stderrdata)
     lines = filter(None, stdoutdata.split('\n'))
-
-    # for efficiency, compile the regex once beforehand
-    histRegex = re.compile(r"^(?P<action>[\w]+([^\[\]]*[\w]+)?)(\[(?P<data>[^\[\]]*?)( v\. [\d]+)?\])?([\s]+)(?P<author>[\w]+([^\[\]]*[\w]+)?)([\s]+)(?P<version>[\d]+)([\s]+)(?P<timestamp>[\w]+[^\[\]]*)$")
 
     # this is complicated because the comment for a check-in will be on the line *following* a regex match
     versionList = []
@@ -527,7 +527,7 @@ def parse_arguments():
     parser.add_argument('-d', '--database', nargs=1, help='Path to local database (only used when resuming an export)')
     parser.add_argument('--version', action='version', version='%(prog)s ' + VERSION)
     parser.add_argument('command', nargs='?', default='all')
-    parser.epilog = "Example flow:\n\tsscm setclient ...\n\tgit init my-new-repo\n\tcd my-new-repo\n\texport-surround-to-git.py -m Sandbox -p \"Sandbox/Merge Test\" -f blah.txt | git fast-import --stats --export-marks=marks.txt"
+    parser.epilog = "Example flow:\n\tsscm setclient ...\n\tgit init my-new-repo\n\tcd my-new-repo\n\texport-surround-to-git.py -m Sandbox -p \"Sandbox/Merge Test\" -f blah.txt | git fast-import --stats --export-marks=marks.txt\n\t...\n\tgit repack ..."
     return parser
 
 
