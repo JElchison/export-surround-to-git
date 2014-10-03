@@ -482,9 +482,10 @@ def cmd_export(database):
     sys.stderr.write("\n[+] Export complete.  Your new Git repository is ready to use.\nDon't forget to run `git repack` at some future time to improve data locality and access performance.\n\n")
 
 
-def cmd_verify(database):
+def cmd_verify(mainline, path, file):
     # TODO verify that all Surround baseline branches are identical to their Git counterparts
     # TODO verify that all Surround snapshot branches are identical to their Git counterparts
+    # should be able to do this without database
     pass
 
 
@@ -498,15 +499,17 @@ def handle_command(parser):
     elif args.command == "export" and args.database:
         verify_surround_environment()
         cmd_export(args.database[0])
-    elif args.command == "verify" and args.database:
-        verify_surround_environment()
-        cmd_verify(args.database[0])
     elif args.command == "all" and args.mainline and args.path and args.file:
+        # typical case
         verify_surround_environment()
         database = create_database()
         cmd_parse(args.mainline[0], args.path[0], args.file[0], database)
         cmd_export(database)
-        cmd_verify(database)
+    elif args.command == "verify" and args.mainline and args.path and args.file:
+        # the 'verify' operation must take place after the export has completed.
+        # as such, it will always be conducted as its own separate operation.
+        verify_surround_environment()
+        cmd_verify(args.mainline[0], args.path[0], args.file[0])
     else:
         parser.print_help()
         sys.exit(1)
