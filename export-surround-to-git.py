@@ -132,10 +132,12 @@ class DatabaseRecord:
 
 
 def verify_surround_environment():
-    # TODO ensure sscm is in PATH and correct version
-    # TODO ensure username, password, server, and port are already cached
-    # sscm version
-    pass
+    # verify we have sscm client installed and in PATH
+    cmd = "sscm version"
+    with open(os.devnull, 'w') as fnull:
+        p = subprocess.Popen(cmd, shell=True, stdout=fnull, stderr=fnull)
+        p.communicate()
+        return (p.returncode == 0)
 
 
 def get_lines_from_sscm_cmd(sscm_cmd):
