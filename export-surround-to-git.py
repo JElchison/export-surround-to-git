@@ -350,8 +350,6 @@ def process_database_record(record):
 
         print("reset TAG_FIXUP")
         print("from refs/heads/%s" % translate_branch_name(record.branch))
-        # TODO following line may not be necessary
-        print()
 
         # get all files contained within snapshot
         files = find_all_files_in_branch_under_path(record.mainline, record.data, record.path)
@@ -438,7 +436,6 @@ def process_database_record(record):
             print("D %s" % record.path)
         elif record.action == Actions.FILE_RENAME:
             print("R %s %s" % (record.path, record.data))
-        print()
     else:
         raise Exception("Unknown record action")
 
