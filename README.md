@@ -1,7 +1,7 @@
 export-surround-to-git
 ======================
 
-Python script to export history from Seapine Surround in a format parseable by `git fast-import`.
+Python script to export history from Seapine Surround in a format parsable by `git fast-import`.
 
 This method is capable of preserving complete history, timestamps, authors, comments, branches, snapshots, etc.
 
