@@ -2,7 +2,7 @@
 
 # export-surround-to-git.py
 #
-# Python script to export history from Seapine Surround in a format parseable by `git fast-import`
+# Python script to export history from Seapine Surround in a format parsable by `git fast-import`
 #
 # Copyright (C) 2014 Jonathan Elchison <JElchison@gmail.com>
 #
@@ -31,7 +31,7 @@ VERSION = '0.5.0'
 #   * Python 2.7.6
 #   * GNU bash, version 4.3.11(1)-release (i686-pc-linux-gnu)
 #   * sscm command-line client version:  2013.0.0 Build 23 (Linux)
-#   * git version 1.9.1
+#   * Git version 1.9.1
 #   * Ubuntu 14.04.1 LTS
 #   * Linux 3.13.0-35-generic #62-Ubuntu SMP Fri Aug 15 01:58:01 UTC 2014 i686 i686 i686 GNU/Linux
 
@@ -279,7 +279,7 @@ def translate_branch_name(name):
     name = re.sub(r'[\/]+', r'/', name)
 
     #
-    # apply rules from git check-ref-format
+    # apply rules from `git check-ref-format`
     #
 
     # 1. no slash-separated component can begin with a dot .
@@ -508,7 +508,7 @@ def handle_command(parser):
 
 
 def parse_arguments():
-    parser = argparse.ArgumentParser(prog='export-surround-to-git.py', description='Exports history from Seapine Surround in a format parseable by `git fast-import`.', formatter_class=argparse.RawDescriptionHelpFormatter)
+    parser = argparse.ArgumentParser(prog='export-surround-to-git.py', description='Exports history from Seapine Surround in a format parsable by `git fast-import`.', formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument('-m', '--mainline', nargs=1, help='Mainline branch containing history to export')
     parser.add_argument('-p', '--path', nargs=1, help='Path containing history to export')
     # TODO auto-generate this.  need to find SMART way to do it, so that branches without this file don't get left out.
