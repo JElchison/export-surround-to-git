@@ -166,20 +166,23 @@ def find_all_branches_in_mainline_containing_path(mainline, path):
     return get_lines_from_sscm_cmd(cmd)
 
 
-def find_all_files_in_branch_under_path(mainline, branch, path):
-    # use all lines from `ls` except for a few
-    cmd = 'sscm ls -b"%s" -p"%s" -r | grep -v \'Total listed files\' | sed -r \'s/unknown status.*$//g\'' % (branch, path)
-    lines = get_lines_from_sscm_cmd(cmd)
+def find_all_files_in_branches_under_path(mainline, branches, path):
+    fileSet = set()
+    for branch in branches:
+        sys.stderr.write("\n[*] Looking for files in branch '%s' ..." % branch)
 
-    # directories are listed on their own line, before a section of their files
-    fileList = []
-    for line in lines:
-        if line[0] != ' ':
-            lastDirectory = line
-        elif line[1] != ' ':
-            fileList.append("%s/%s" % (lastDirectory, line.strip()))
+        # use all lines from `ls` except for a few
+        cmd = 'sscm ls -b"%s" -p"%s" -r | grep -v \'Total listed files\' | sed -r \'s/unknown status.*$//g\'' % (branch, path)
+        lines = get_lines_from_sscm_cmd(cmd)
 
-    return fileList
+        # directories are listed on their own line, before a section of their files
+        for line in lines:
+            if line[0] != ' ':
+                lastDirectory = line
+            elif line[1] != ' ':
+                fileSet.add("%s/%s" % (lastDirectory, line.strip()))
+
+    return fileSet
 
 
 def is_snapshot_branch(branch, repo):
@@ -256,10 +259,13 @@ def cmd_parse(mainline, path, database):
     sys.stderr.write("[+] Beginning parse phase...")
 
     branches = find_all_branches_in_mainline_containing_path(mainline, path)
+
+    # NOTE how we're passing branches, not branch.  this is to detect deleted files.
+    files = find_all_files_in_branches_under_path(mainline, branches, path)
+    
     for branch in branches:
         sys.stderr.write("\n[*] Parsing branch '%s' ..." % branch)
 
-        files = find_all_files_in_branch_under_path(mainline, branch, path)
         for file in files:
             #sys.stderr.write("\n[*] \tParsing file '%s' ..." % file)
 
@@ -364,7 +370,7 @@ def process_database_record(record):
         print("from refs/heads/%s" % translate_branch_name(record.branch))
 
         # get all files contained within snapshot
-        files = find_all_files_in_branch_under_path(record.mainline, record.data, record.path)
+        files = find_all_files_in_branches_under_path(record.mainline, [record.data], record.path)
         startMark = None
         for file in files:
             blobMark = print_blob_for_file(record.data, file)
