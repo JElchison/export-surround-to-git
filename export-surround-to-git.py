@@ -58,10 +58,10 @@ import shutil
 #
 
 # temp directory in cwd, holds files fetched from Surround
-scratchDir = "scratch/"
+scratchDir = "scratch"
 
 # for efficiency, compile the history regex once beforehand
-histRegex = re.compile(r"^(?P<action>[\w]+([^\[\]]*[\w]+)?)(\[(?P<data>[^\[\]]*?)( v\. [\d]+)?\])?([\s]+)(?P<author>[\w]+([^\[\]]*[\w]+)?)([\s]+)(?P<version>[\d]+)([\s]+)(?P<timestamp>[\w]+[^\[\]]*)$")
+histRegex = re.compile(r"^(?P<action>[\w]+([^\[\]\r\n]*[\w]+)?)(\[(?P<data>[^\[\]\r\n]*?)( v\. [\d]+)?\]| from \[(?P<from>[^\[\]\r\n]*)\] to \[(?P<to>[^\[\]\r\n]*)\])?([\s]+)(?P<author>[\w]+([^\[\]\r\n]*[\w]+)?)([\s]+)(?P<version>[\d]+)([\s]+)(?P<timestamp>[\w]+[^\[\]\r\n]*)$", re.MULTILINE | re.DOTALL)
 
 # global "mark" number.  incremented before used, as 1 is minimum value allowed.
 mark = 0
@@ -85,7 +85,7 @@ class Actions:
 actionMap = {"add"                   : Actions.FILE_MODIFY,
              "add to repository"     : Actions.FILE_MODIFY,
              "add to branch"         : None,
-             "add from branch"       : None,
+             "add from branch"       : Actions.FILE_MODIFY,
              "attach to issue"       : None,  # TODO maybe use lightweight Git tag to track this
              "attach to test case"   : None,  # TODO maybe use lightweight Git tag to track this
              "attach to requirement" : None,  # TODO maybe use lightweight Git tag to track this
@@ -98,12 +98,14 @@ actionMap = {"add"                   : Actions.FILE_MODIFY,
              "file moved"            : Actions.FILE_RENAME,
              "file renamed"          : Actions.FILE_RENAME,
              "label"                 : None,  # TODO maybe treat this like a snapshot branch
+             "moved"                 : Actions.FILE_RENAME,
              "promote"               : None,
              "promote from"          : Actions.FILE_MODIFY,
              "promote to"            : Actions.FILE_MODIFY,
              "rebase from"           : Actions.FILE_MODIFY,
              "rebase with merge"     : Actions.FILE_MODIFY,
              "remove"                : Actions.FILE_DELETE,
+             "renamed"               : Actions.FILE_RENAME,
              "repo destroyed"        : None,  # TODO might need to be Actions.FILE_DELETE
              "repo moved"            : None,  # TODO might need to be Actions.FILE_DELETE
              "repo renamed"          : None,  # TODO might need to be Actions.FILE_DELETE
@@ -120,21 +122,22 @@ actionMap = {"add"                   : Actions.FILE_MODIFY,
 
 class DatabaseRecord:
     def __init__(self, tuple):
-        self.init(tuple[0], tuple[1], tuple[2], tuple[3], tuple[4], tuple[5], tuple[6], tuple[7], tuple[8])
+        self.init(tuple[0], tuple[1], tuple[2], tuple[3], tuple[4], tuple[5], tuple[6], tuple[7], tuple[8], tuple[9])
 
-    def init(self, timestamp, action, mainline, branch, path, version, author, comment, data):
+    def init(self, timestamp, action, mainline, branch, path, origPath, version, author, comment, data):
         self.timestamp = timestamp
         self.action = action
         self.mainline = mainline
         self.branch = branch
         self.path = path
+        self.origPath = origPath
         self.version = version
         self.author = author
         self.comment = comment
         self.data = data
 
     def get_tuple(self):
-        return (self.timestamp, self.action, self.mainline, self.branch, self.path, self.version, self.author, self.comment, self.data)
+        return (self.timestamp, self.action, self.mainline, self.branch, self.path, self.origPath, self.version, self.author, self.comment, self.data)
 
 
 def verify_surround_environment():
@@ -201,34 +204,96 @@ def find_all_file_versions(mainline, branch, path):
 
     # this is complicated because the comment for a check-in will be on the line *following* a regex match
     versionList = []
+    comment = None
     bFoundOne = False
     for line in lines:
+        #sys.stderr.write("\n=== Trying line = " + line)
+
         result = histRegex.search(line)
         if result:
             # we have a new match.
+            #sys.stderr.write("\n******* line match!")
+
             if bFoundOne:
                 # before processing this match, we need to commit the previously found version
-                versionList.append((timestamp, action, int(version), author, comment, data))
+                versionList.append((timestamp, action, origFile, int(version), author, comment, data))
             # set bFoundOne once we've found our first version
             bFoundOne = True
             action = result.group("action")
+            origFile = result.group("from")
+            to = result.group("to")
             author = result.group("author")
             version = result.group("version")
             timestamp = result.group("timestamp")
             # reset comment
             comment = None
-            data = result.group("data")
+            if origFile and to:
+                # we're in a rename/move scenario
+                data = to
+            else:
+                # we're (possibly) in a branch scenario
+                data = result.group("data")
         else:
-            # no match.  this must be a comment line.
+            # no match.  this must be a comment line (or the start of a new history line, with a line break).
+            #sys.stderr.write("\n------- no line match")
+
             if not comment:
                 # start of comment
                 comment = re.sub("^ Comments \- ", "", line, count=1)
             else:
                 # continuation of comment
                 comment += "\n" + line
+
+                # check for a multi-line comment that is actually a version match
+                commentLines = [real_line for real_line in comment.split('\n') if real_line]
+                substrings = []
+                # '-1' on following line is because we don't need to check the last comment line again.
+                # (we just checked it above.)
+                for i in range(len(commentLines)-1):
+                    substrings.append('\n'.join(commentLines[i:len(commentLines)]))
+                for substring in substrings:
+                    #sys.stderr.write("\n----- Trying substring = " + substring)
+
+                    result = histRegex.search(substring)
+                    if result:
+                        # we have a new match
+
+                        # pull off end part of comment that we're recording as a version
+                        if i == 0:
+                            # using the entire comment
+                            comment = None
+                        else:
+                            # leaving behind the previous comment
+                            comment = '\n'.join(commentLines[0:i-1])
+                        
+                        if bFoundOne:
+                            # before processing this match, we need to commit the previously found version
+                            versionList.append((timestamp, action, origFile, int(version), author, comment, data))
+                        # set bFoundOne once we've found our first version
+                        bFoundOne = True
+                        action = result.group("action")
+                        origFile = result.group("from")
+                        to = result.group("to")
+                        author = result.group("author")
+                        version = result.group("version")
+                        timestamp = result.group("timestamp")
+                        # reset comment
+                        comment = None
+                        if origFile and to:
+                            # we're in a rename/move scenario
+                            data = to
+                        else:
+                            # we're (possibly) in a branch scenario
+                            data = result.group("data")
+
+                        #sys.stderr.write("\n******* comment match! action = '" + str(action) + "' comment = '" + str(comment) + "'")
+                        break
+            
     # before moving on, we need to commit the last found version
     if bFoundOne:
-        versionList.append((timestamp, action, int(version), author, comment, data))
+        versionList.append((timestamp, action, origFile, int(version), author, comment, data))
+
+    #sys.stderr.write("\nreturning versionList = " + str(versionList))
 
     return versionList
 
@@ -239,7 +304,7 @@ def create_database():
     database = sqlite3.connect(name)
     c = database.cursor()
     # we intentionally avoid duplicates via the PRIMARY KEY
-    c.execute('''CREATE TABLE operations (timestamp INTEGER NOT NULL, action INTEGER NOT NULL, mainline TEXT NOT NULL, branch TEXT NOT NULL, path TEXT, version INTEGER, author TEXT, comment TEXT, data TEXT, PRIMARY KEY(action, mainline, branch, path, version, author, comment, data))''')
+    c.execute('''CREATE TABLE operations (timestamp INTEGER NOT NULL, action INTEGER NOT NULL, mainline TEXT NOT NULL, branch TEXT NOT NULL, path TEXT, origPath TEXT, version INTEGER, author TEXT, comment TEXT, data TEXT, PRIMARY KEY(action, mainline, branch, path, origPath, version, author, data))''')
     database.commit()
     return database
 
@@ -247,12 +312,16 @@ def create_database():
 def add_record_to_database(record, database):
     c = database.cursor()
     try:
-        c.execute('''INSERT INTO operations VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)''', record.get_tuple())
+        c.execute('''INSERT INTO operations VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)''', record.get_tuple())
     except sqlite3.IntegrityError as e:
         # TODO is there a better way to detect duplicates?  is sqlite3.IntegrityError too wide a net?
         #sys.stderr.write("\nDetected duplicate record %s" % str(record.get_tuple()))
         pass
     database.commit()
+
+    if record.action == Actions.FILE_RENAME:
+        c.execute('''UPDATE operations SET origPath=? WHERE action=? AND mainline=? AND branch=? AND path=? AND (origPath IS NULL OR origPath='') AND version<=?''', (record.origPath, Actions.FILE_MODIFY, record.mainline, record.branch, record.path, record.version))
+        database.commit()
 
 
 def cmd_parse(mainline, path, database):
@@ -261,28 +330,39 @@ def cmd_parse(mainline, path, database):
     branches = find_all_branches_in_mainline_containing_path(mainline, path)
 
     # NOTE how we're passing branches, not branch.  this is to detect deleted files.
-    files = find_all_files_in_branches_under_path(mainline, branches, path)
+    filesToWalk = find_all_files_in_branches_under_path(mainline, branches, path)
     
     for branch in branches:
         sys.stderr.write("\n[*] Parsing branch '%s' ..." % branch)
 
-        for file in files:
-            #sys.stderr.write("\n[*] \tParsing file '%s' ..." % file)
+        for fullPathWalk in filesToWalk:
+            #sys.stderr.write("\n[*] \tParsing file '%s' ..." % fullPathWalk)
 
-            versions = find_all_file_versions(mainline, branch, file)
+            pathWalk, fileWalk = os.path.split(fullPathWalk)
+
+            versions = find_all_file_versions(mainline, branch, fullPathWalk)
             #sys.stderr.write("\n[*] \t\tversions = %s" % versions)
 
-            for timestamp, action, version, author, comment, data in versions:
+            for timestamp, action, origPath, version, author, comment, data in versions:
                 epoch = int(time.mktime(time.strptime(timestamp, "%m/%d/%Y %I:%M %p")))
                 # branch operations don't follow the actionMap
                 if action == "add to branch":
-                    if is_snapshot_branch(data, os.path.split(file)[0]):
+                    if is_snapshot_branch(data, pathWalk):
                         branchAction = Actions.BRANCH_SNAPSHOT
                     else:
                         branchAction = Actions.BRANCH_BASELINE
-                    add_record_to_database(DatabaseRecord((epoch, branchAction, mainline, branch, path, version, author, comment, data)), database)
+                    add_record_to_database(DatabaseRecord((epoch, branchAction, mainline, branch, path, None, version, author, comment, data)), database)
                 else:
-                    add_record_to_database(DatabaseRecord((epoch, actionMap[action], mainline, branch, file, version, author, comment, data)), database)
+                    if origPath:
+                        if action == "renamed":
+                            origFullPath = os.path.join(pathWalk, origPath)
+                            data = os.path.join(pathWalk, data)
+                        elif action == "moved":
+                            origFullPath = os.path.join(origPath, fileWalk)
+                            data = os.path.join(data, fileWalk)
+                    else:
+                        origFullPath = None
+                    add_record_to_database(DatabaseRecord((epoch, actionMap[action], mainline, branch, fullPathWalk, origFullPath, version, author, comment, data)), database)
 
     sys.stderr.write("\n[+] Parse phase complete")
 
@@ -337,7 +417,7 @@ def print_blob_for_file(branch, fullPath, version=None):
     global mark
 
     path, file = os.path.split(fullPath)
-    localPath = scratchDir + file
+    localPath = os.path.join(scratchDir, file)
     if os.path.isfile(localPath):
         os.remove(localPath)
     if version:
@@ -445,15 +525,23 @@ def process_database_record(record):
         else:
             print("data 0")
 
-        if record.data:
-            # this is a branch operation.  record the other ancestor.
-            print("merge refs/heads/%s" % translate_branch_name(record.data))
         if record.action == Actions.FILE_MODIFY:
-            print("M 100644 :%d %s" % (blobMark, record.path))
+            if record.origPath:
+                # looks like there was a previous rename.  use the original name.
+                print("M 100644 :%d %s" % (blobMark, record.origPath))
+            else:
+                # no previous rename.  good to use the current name.
+                print("M 100644 :%d %s" % (blobMark, record.path))
         elif record.action == Actions.FILE_DELETE:
             print("D %s" % record.path)
         elif record.action == Actions.FILE_RENAME:
-            print("R %s %s" % (record.path, record.data))
+            # NOTE we're not using record.path here, as there may have been multiple renames in the file's history
+            print("R %s %s" % (record.origPath, record.data))
+        else:
+            # this is a branch operation
+            if record.data:
+                # record the other ancestor
+                print("merge refs/heads/%s" % translate_branch_name(record.data))
     else:
         raise Exception("Unknown record action")
 
@@ -486,7 +574,10 @@ def cmd_export(database):
             print("progress", time.strftime('%Y-%m-%d', time.localtime(record[0])))
 
     # cleanup
-    shutil.rmtree(scratchDir)
+    try:
+        shutil.rmtree(scratchDir)
+    except OSError:
+        pass
     if os.path.isfile("./.git/TAG_FIXUP"):
         # TODO why doesn't this work?  is this too early since we're piping our output, and then `git fast-import` just creates it again?
         os.remove("./.git/TAG_FIXUP")
