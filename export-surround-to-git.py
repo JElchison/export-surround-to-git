@@ -150,13 +150,19 @@ def get_lines_from_sscm_cmd(sscm_cmd):
     # helper function to clean each item on a line since sscm has lots of newlines
     p = subprocess.Popen(sscm_cmd, shell=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
     stdoutdata, stderrdata = p.communicate()
-    sys.stderr.write(stderrdata)
+    stderrdata = stderrdata.strip()
+    if stderrdata:
+        sys.stderr.write('\n')
+        sys.stderr.write(stderrdata)
     return [real_line for real_line in stdoutdata.split('\n') if real_line]
 
 
-def find_all_branches_in_mainline_containing_path(mainline, path, file):
+def find_all_branches_in_mainline_containing_path(mainline, path):
     # pull out lines from `lsbranch` that are of type baseline, mainline, or snapshot
-    cmd = 'sscm lsbranch -b"%s" -p"%s" -f"%s" | sed -r \'s/ \((baseline|mainline|snapshot)\)$//g\'' % (mainline, path, file)
+    cmd = 'sscm lsbranch -b"%s" -p"%s" | sed -r \'s/ \((baseline|mainline|snapshot)\)$//g\'' % (mainline, path)
+    # FTODO this command yields branches that don't include the path specified.
+    # should we filter them out here?  may increase efficiency to not deal with them later.
+    # NOTE: don't use '-f' with this command, as it really restricts overall usage.
     return get_lines_from_sscm_cmd(cmd)
 
 
@@ -246,10 +252,10 @@ def add_record_to_database(record, database):
     database.commit()
 
 
-def cmd_parse(mainline, path, file, database):
+def cmd_parse(mainline, path, database):
     sys.stderr.write("[+] Beginning parse phase...")
 
-    branches = find_all_branches_in_mainline_containing_path(mainline, path, file)
+    branches = find_all_branches_in_mainline_containing_path(mainline, path)
     for branch in branches:
         sys.stderr.write("\n[*] Parsing branch '%s' ..." % branch)
 
@@ -482,7 +488,7 @@ def cmd_export(database):
     sys.stderr.write("\n[+] Export complete.  Your new Git repository is ready to use.\nDon't forget to run `git repack` at some future time to improve data locality and access performance.\n\n")
 
 
-def cmd_verify(mainline, path, file):
+def cmd_verify(mainline, path):
     # TODO verify that all Surround baseline branches are identical to their Git counterparts
     # TODO verify that all Surround snapshot branches are identical to their Git counterparts
     # should be able to do this without database
@@ -492,24 +498,24 @@ def cmd_verify(mainline, path, file):
 def handle_command(parser):
     args = parser.parse_args()
 
-    if args.command == "parse" and args.mainline and args.path and args.file:
+    if args.command == "parse" and args.mainline and args.path:
         verify_surround_environment()
         database = create_database()
-        cmd_parse(args.mainline[0], args.path[0], args.file[0], database)
+        cmd_parse(args.mainline[0], args.path[0], database)
     elif args.command == "export" and args.database:
         verify_surround_environment()
         cmd_export(args.database[0])
-    elif args.command == "all" and args.mainline and args.path and args.file:
+    elif args.command == "all" and args.mainline and args.path:
         # typical case
         verify_surround_environment()
         database = create_database()
-        cmd_parse(args.mainline[0], args.path[0], args.file[0], database)
+        cmd_parse(args.mainline[0], args.path[0], database)
         cmd_export(database)
-    elif args.command == "verify" and args.mainline and args.path and args.file:
+    elif args.command == "verify" and args.mainline and args.path:
         # the 'verify' operation must take place after the export has completed.
         # as such, it will always be conducted as its own separate operation.
         verify_surround_environment()
-        cmd_verify(args.mainline[0], args.path[0], args.file[0])
+        cmd_verify(args.mainline[0], args.path[0])
     else:
         parser.print_help()
         sys.exit(1)
@@ -519,8 +525,6 @@ def parse_arguments():
     parser = argparse.ArgumentParser(prog='export-surround-to-git.py', description='Exports history from Seapine Surround in a format parsable by `git fast-import`.', formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument('-m', '--mainline', nargs=1, help='Mainline branch containing history to export')
     parser.add_argument('-p', '--path', nargs=1, help='Path containing history to export')
-    # TODO auto-generate this.  need to find SMART way to do it, so that branches without this file don't get left out.
-    parser.add_argument('-f', '--file', nargs=1, help='Any filename in target path')
     parser.add_argument('-d', '--database', nargs=1, help='Path to local database (only used when resuming an export)')
     parser.add_argument('--version', action='version', version='%(prog)s ' + VERSION)
     parser.add_argument('command', nargs='?', default='all')
