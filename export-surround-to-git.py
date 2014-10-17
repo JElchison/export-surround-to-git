@@ -250,7 +250,7 @@ def find_all_file_versions(mainline, branch, path):
                 substrings = []
                 # '-1' on following line is because we don't need to check the last comment line again.
                 # (we just checked it above.)
-                for i in range(len(commentLines)-1):
+                for i in range(len(commentLines) - 1):
                     substrings.append('\n'.join(commentLines[i:len(commentLines)]))
                 for substring in substrings:
                     #sys.stderr.write("\n----- Trying substring = " + substring)
@@ -265,8 +265,8 @@ def find_all_file_versions(mainline, branch, path):
                             comment = None
                         else:
                             # leaving behind the previous comment
-                            comment = '\n'.join(commentLines[0:i-1])
-                        
+                            comment = '\n'.join(commentLines[0:i - 1])
+
                         if bFoundOne:
                             # before processing this match, we need to commit the previously found version
                             versionList.append((timestamp, action, origFile, int(version), author, comment, data))
@@ -289,7 +289,7 @@ def find_all_file_versions(mainline, branch, path):
 
                         #sys.stderr.write("\n******* comment match! action = '" + str(action) + "' comment = '" + str(comment) + "'")
                         break
-            
+
     # before moving on, we need to commit the last found version
     if bFoundOne:
         versionList.append((timestamp, action, origFile, int(version), author, comment, data))
@@ -332,7 +332,7 @@ def cmd_parse(mainline, path, database):
 
     # NOTE how we're passing branches, not branch.  this is to detect deleted files.
     filesToWalk = find_all_files_in_branches_under_path(mainline, branches, path)
-    
+
     for branch in branches:
         sys.stderr.write("\n[*] Parsing branch '%s' ..." % branch)
 
