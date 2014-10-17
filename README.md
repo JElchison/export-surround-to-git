@@ -8,11 +8,11 @@ This method is capable of preserving complete history, timestamps, authors, comm
 
 # Usage
 ```
-usage: export-surround-to-git.py [-h] [-m MAINLINE] [-p PATH] [-f FILE]
-                                 [-d DATABASE] [--version]
+usage: export-surround-to-git.py [-h] [-m MAINLINE] [-p PATH] [-d DATABASE]
+                                 [--version]
                                  [command]
 
-Exports history from Seapine Surround in a format parseable by `git fast-import`.
+Exports history from Seapine Surround in a format parsable by `git fast-import`.
 
 positional arguments:
   command
@@ -22,7 +22,6 @@ optional arguments:
   -m MAINLINE, --mainline MAINLINE
                         Mainline branch containing history to export
   -p PATH, --path PATH  Path containing history to export
-  -f FILE, --file FILE  Any filename in target path
   -d DATABASE, --database DATABASE
                         Path to local database (only used when resuming an
                         export)
