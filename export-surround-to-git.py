@@ -161,7 +161,8 @@ def get_lines_from_sscm_cmd(sscm_cmd):
 
 
 def find_all_branches_in_mainline_containing_path(mainline, path):
-    # pull out lines from `lsbranch` that are of type baseline, mainline, or snapshot
+    # pull out lines from `lsbranch` that are of type baseline, mainline, or snapshot.
+    # no sense in adding the `-d` switch, as `sscm ls` won't list anything for deleted branches.
     cmd = 'sscm lsbranch -b"%s" -p"%s" | sed -r \'s/ \((baseline|mainline|snapshot)\)$//g\'' % (mainline, path)
     # FTODO this command yields branches that don't include the path specified.
     # should we filter them out here?  may increase efficiency to not deal with them later.
