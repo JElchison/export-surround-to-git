@@ -89,6 +89,7 @@ actionMap = {"add"                   : Actions.FILE_MODIFY,
              "attach to issue"       : None,  # TODO maybe use lightweight Git tag to track this
              "attach to test case"   : None,  # TODO maybe use lightweight Git tag to track this
              "attach to requirement" : None,  # TODO maybe use lightweight Git tag to track this
+             "attach to observation" : None,  # TODO maybe use lightweight Git tag to track this
              "attach to external"    : None,  # TODO maybe use lightweight Git tag to track this
              "break share"           : None,
              "checkin"               : Actions.FILE_MODIFY,
@@ -97,6 +98,7 @@ actionMap = {"add"                   : Actions.FILE_MODIFY,
              "file destroyed"        : Actions.FILE_DELETE,
              "file moved"            : Actions.FILE_RENAME,
              "file renamed"          : Actions.FILE_RENAME,
+             "in label"              : None,  # TODO maybe treat this like a snapshot branch
              "label"                 : None,  # TODO maybe treat this like a snapshot branch
              "moved"                 : Actions.FILE_RENAME,
              "promote"               : None,
