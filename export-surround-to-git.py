@@ -104,6 +104,7 @@ actionMap = {"add"                   : Actions.FILE_MODIFY,
              "promote"               : None,
              "promote from"          : Actions.FILE_MODIFY,
              "promote to"            : Actions.FILE_MODIFY,
+             "rebase (merged) from"  : Actions.FILE_MODIFY,
              "rebase from"           : Actions.FILE_MODIFY,
              "rebase with merge"     : Actions.FILE_MODIFY,
              "remove"                : Actions.FILE_DELETE,
@@ -159,13 +160,31 @@ def get_lines_from_sscm_cmd(sscm_cmd):
     if stderrdata:
         sys.stderr.write('\n')
         sys.stderr.write(stderrdata)
-    return [real_line for real_line in stdoutdata.split('\n') if real_line]
+    if "sscm history" in sscm_cmd:
+        newLines = []
+        #regex to find lines that end in ] and then start a new line. The comment section of sscm history's return always ends in ] so mostly checking for newline after comment
+        regexp = re.compile(r']\s*$')
+        lines = stdoutdata.split('\n')
+        i = 0
+        while i != len(lines):
+            if regexp.search(lines[i]):
+                #We found a line that ends in ] which means surround split the line into two lines. Add the two lines together by replacing the empty spaces after the ]$ with a single space
+                newLine = lines[i] + " " + lines[i + 1]
+                newLines.append(re.sub(r']\s*\n\s*' '] ', newLine))
+                i = i + 2
+            else:
+                newLines.append(lines[i])
+                i = i + 1
+        return newLines
+    else:
+        return [real_line for real_line in stdoutdata.split('\n') if real_line]
+
 
 
 def find_all_branches_in_mainline_containing_path(mainline, path):
     # pull out lines from `lsbranch` that are of type baseline, mainline, or snapshot.
     # no sense in adding the `-d` switch, as `sscm ls` won't list anything for deleted branches.
-    cmd = 'sscm lsbranch -b"%s" -p"%s" | sed -r \'s/ \((baseline|mainline|snapshot)\)$//g\'' % (mainline, path)
+    cmd = 'sscm lsbranch -a -b"%s" -p"%s" | sed -r \'s/ \((baseline|mainline|snapshot)\)$//g\'' % (mainline, path)
     # FTODO this command yields branches that don't include the path specified.
     # should we filter them out here?  may increase efficiency to not deal with them later.
     # NOTE: don't use '-f' with this command, as it really restricts overall usage.
