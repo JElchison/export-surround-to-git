@@ -1,4 +1,4 @@
-#!/usr/bin/env python
+#!/usr/bin/env python3
 
 # export-surround-to-git.py
 #
@@ -19,6 +19,11 @@
 # You should have received a copy of the GNU General Public License along
 # with this program; if not, write to the Free Software Foundation, Inc.,
 # 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA.
+
+# TODOs
+# - dynamically find a tempory folder to store files. Python should have an os module for this
+# - try using sscm setclient to handle authentication instead of passing the password here
+# - allow the user to name the database file
 
 
 # attempt to support both Python2.6+ and Python3
@@ -61,7 +66,8 @@ import shutil
 scratchDir = "scratch"
 
 # for efficiency, compile the history regex once beforehand
-histRegex = re.compile(r"^(?P<action>[\w]+([^\[\]\r\n]*[\w]+)?)(\[(?P<data>[^\[\]\r\n]*?)( v\. [\d]+)?\]| from \[(?P<from>[^\[\]\r\n]*)\] to \[(?P<to>[^\[\]\r\n]*)\])?([\s]+)(?P<author>[\w]+([^\[\]\r\n]*[\w]+)?)([\s]+)(?P<version>[\d]+)([\s]+)(?P<timestamp>[\w]+[^\[\]\r\n]*)$", re.MULTILINE | re.DOTALL)
+# TODO timestamp should match times more explicitly but I want to ensure timestamps are always printed the sameway from sscm
+histRegex = re.compile(r"^(?P<action>[\w]+([^\[\]\r\n]*[\w]+)?)(\[(?P<data>[^\[\]\r\n]*?)( v\. [\d]+)?\]| from \[(?P<from>[^\[\]\r\n]*)\] to \[(?P<to>[^\[\]\r\n]*)\])?([\s]+)(?P<author>[\w]+([^\[\]\r\n]*[\w]+)?)([\s]+)(?P<version>[\d]+)([\s]+)(?P<timestamp>\d\d\/[^\[\]\r\n]*)$", re.MULTILINE | re.DOTALL)
 
 # global "mark" number.  incremented before used, as 1 is minimum value allowed.
 mark = 0
@@ -69,6 +75,10 @@ mark = 0
 # local time zone
 # TODO how detect this?  right now we assume EST.
 timezone = "-0500"
+
+sscm = "sscm"
+username = ""
+password = ""
 
 # keeps track of snapshot name --> mark number pairing
 tagDict = {}
@@ -92,6 +102,7 @@ actionMap = {"add"                   : Actions.FILE_MODIFY,
              "attach to observation" : None,  # TODO maybe use lightweight Git tag to track this
              "attach to external"    : None,  # TODO maybe use lightweight Git tag to track this
              "break share"           : None,
+             "Change state - Work in Progress" : None,
              "checkin"               : Actions.FILE_MODIFY,
              "delete"                : Actions.FILE_DELETE,
              "duplicate"             : Actions.FILE_MODIFY,
@@ -144,7 +155,7 @@ class DatabaseRecord:
 
 def verify_surround_environment():
     # verify we have sscm client installed and in PATH
-    cmd = "sscm version"
+    cmd = sscm + " version"
     with open(os.devnull, 'w') as fnull:
         p = subprocess.Popen(cmd, shell=True, stdout=fnull, stderr=fnull)
         p.communicate()
@@ -155,21 +166,40 @@ def get_lines_from_sscm_cmd(sscm_cmd):
     # helper function to clean each item on a line since sscm has lots of newlines
     p = subprocess.Popen(sscm_cmd, shell=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
     stdoutdata, stderrdata = p.communicate()
-    stderrdata = stderrdata.strip()
+    stdoutdata = stdoutdata.decode('utf8')
+    stderrdata = (stderrdata.strip()).decode('utf8')
     if stderrdata:
         sys.stderr.write('\n')
-        sys.stderr.write(stderrdata)
-    return [real_line for real_line in stdoutdata.split('\n') if real_line]
+        sys.stderr.write('[*] sscm error from cmd ' + sscm_cmd + '\n')
+        sys.stderr.write('[*]\t error = ' + stderrdata)
+    return [real_line for real_line in stdoutdata.splitlines() if real_line]
 
 
 def find_all_branches_in_mainline_containing_path(mainline, path):
     # pull out lines from `lsbranch` that are of type baseline, mainline, or snapshot.
     # no sense in adding the `-d` switch, as `sscm ls` won't list anything for deleted branches.
-    cmd = 'sscm lsbranch -b"%s" -p"%s" | sed -r \'s/ \((baseline|mainline|snapshot)\)$//g\'' % (mainline, path)
+    cmd = sscm + ' lsbranch -b"%s" -p"%s" -o ' % (mainline, path)
+    if username and password:
+        cmd = cmd + '-y"%s":"%s" ' % (username, password)
+    #cmd = cmd + '| sed -r \'s/ \((baseline|mainline|snapshot)\)$//g\' | grep \"%s>\"' % mainline
+
     # FTODO this command yields branches that don't include the path specified.
-    # should we filter them out here?  may increase efficiency to not deal with them later.
+    # we can however filter out the branches by using the -o option to print
+    # the full path of each branch and manually parse incorrect branches out
     # NOTE: don't use '-f' with this command, as it really restricts overall usage.
-    return get_lines_from_sscm_cmd(cmd)
+    branches = get_lines_from_sscm_cmd(cmd)
+
+    our_branches = []
+    # Parse the branches and find the branches in the path provided
+    # TODO might need to filter by baseline mainline and snapshot types too
+    for branch in branches:
+       if branch.startswith(path):
+           # Since the branch currently shows the full path we need to get the
+           # the branch name by getting only the last element in the path
+           match = re.search(r'\/([^\/]+)\s\<', branch)
+           our_branches.append(match.group(1))
+
+    return our_branches
 
 
 def find_all_files_in_branches_under_path(mainline, branches, path):
@@ -178,38 +208,63 @@ def find_all_files_in_branches_under_path(mainline, branches, path):
         sys.stderr.write("\n[*] Looking for files in branch '%s' ..." % branch)
 
         # use all lines from `ls` except for a few
-        cmd = 'sscm ls -b"%s" -p"%s" -r | grep -v \'Total listed files\' | sed -r \'s/unknown status.*$//g\'' % (branch, path)
+        cmd = sscm + ' ls -b"%s" -p"%s" -r ' % (branch, path)
+        if username and password:
+            cmd = cmd + '-y"%s":"%s" ' % (username, password)
+        #cmd = cmd + '| grep -v \'Total listed files\' | sed -r \'s/unknown status.*$//g\''
+        # TODO why were they only looking for files with unkown status
         lines = get_lines_from_sscm_cmd(cmd)
 
         # directories are listed on their own line, before a section of their files
-        for line in lines:
-            if line[0] != ' ':
+        # the last line of the output just prints the number of files found so
+        # we can ignore it.
+        for line in lines[:-1]:
+            if (line.strip())[0] == '-':
+                # This is a comment and not a file
+                continue
+            elif line[0] != ' ':
                 lastDirectory = line
             elif line[1] != ' ':
-                fileSet.add("%s/%s" % (lastDirectory, line.strip()))
+                # Extract the file name for this line
+                #file = (line.strip().split())[0]
+                end_file_index = line.find(" current")
+                if end_file_index == -1:
+                    end_file_index = line.find(" unknown status")
+                if end_file_index == -1:
+                    raise Exception("Couldn't find the filename in ls output")
+                file = line[:end_file_index].strip()
+                fileSet.add("%s/%s" % (lastDirectory, file))
 
     return fileSet
 
 
 def is_snapshot_branch(branch, repo):
     # TODO can we eliminate 'repo' as an argument to this function?
-    cmd = 'sscm branchproperty -b"%s" -p"%s"' % (branch, repo)
+    cmd = sscm + ' branchproperty -b"%s" -p"%s" ' % (branch, repo)
+    if username and password:
+            cmd = cmd + '-y"%s":"%s" ' % (username, password)
     with open(os.devnull, 'w') as fnull:
-        result = subprocess.Popen(cmd, shell=True, stdout=subprocess.PIPE, stderr=fnull).communicate()[0]
+        result = subprocess.Popen(cmd, shell=True, stdout=subprocess.PIPE, stderr=fnull).communicate()[0].decode("utf8")
     return result.find("snapshot") != -1
 
 
 def find_all_file_versions(mainline, branch, path):
     repo, file = os.path.split(path)
 
-    cmd = 'sscm history "%s" -b"%s" -p"%s" | tail -n +5' % (file, branch, repo)
+    #repo = 'T-BCE1-SW-Development/Male_Hair_Removal/MightyLi/Software/Source'
+    #file = 'motor.c'
+
+    cmd = sscm + ' history "%s" -b"%s" -p"%s" ' % (file, branch, repo)
+    if username and password:
+        cmd = cmd + '-y"%s":"%s" ' % (username, password)
     lines = get_lines_from_sscm_cmd(cmd)
 
     # this is complicated because the comment for a check-in will be on the line *following* a regex match
     versionList = []
     comment = None
     bFoundOne = False
-    for line in lines:
+    # The first 4 lines are just the header of this printout
+    for line in lines[4:]:
         #sys.stderr.write("\n=== Trying line = " + line)
 
         result = histRegex.search(line)
@@ -248,7 +303,7 @@ def find_all_file_versions(mainline, branch, path):
                 comment += "\n" + line
 
                 # check for a multi-line comment that is actually a version match
-                commentLines = [real_line for real_line in comment.split('\n') if real_line]
+                commentLines = [real_line for real_line in comment.splitlines() if real_line]
                 substrings = []
                 # '-1' on following line is because we don't need to check the last comment line again.
                 # (we just checked it above.)
@@ -262,12 +317,12 @@ def find_all_file_versions(mainline, branch, path):
                         # we have a new match
 
                         # pull off end part of comment that we're recording as a version
-                        if i == 0:
+                        if result.start("action") == 0:
                             # using the entire comment
                             comment = None
                         else:
                             # leaving behind the previous comment
-                            comment = '\n'.join(commentLines[0:i - 1])
+                            comment = substring[:result.start("action")-1]
 
                         if bFoundOne:
                             # before processing this match, we need to commit the previously found version
@@ -345,16 +400,21 @@ def cmd_parse(mainline, path, database):
 
             versions = find_all_file_versions(mainline, branch, fullPathWalk)
             #sys.stderr.write("\n[*] \t\tversions = %s" % versions)
-
             for timestamp, action, origPath, version, author, comment, data in versions:
-                epoch = int(time.mktime(time.strptime(timestamp, "%m/%d/%Y %I:%M %p")))
+                # TODO American date formats are not the only time format. This should be configurable
+                epoch = int(time.mktime(time.strptime(timestamp, "%d/%m/%Y %H:%M")))
                 # branch operations don't follow the actionMap
                 if action == "add to branch":
                     if is_snapshot_branch(data, pathWalk):
                         branchAction = Actions.BRANCH_SNAPSHOT
                     else:
                         branchAction = Actions.BRANCH_BASELINE
-                    add_record_to_database(DatabaseRecord((epoch, branchAction, mainline, branch, path, None, version, author, comment, data)), database)
+                    # each add to branch command happens once for a new branch, but will show up on each file
+                    # that is a part of the branch added too. To ensure there are no duplicates use an empty
+                    # string for origPath (its irrelevant in the export phase for this action) and set the version
+                    # to one. We cant use None/NULL for these values as SQLITE doesnt consider NULL==NULL as a true
+                    # statement.
+                    add_record_to_database(DatabaseRecord((epoch, branchAction, mainline, branch, path, "NULL", 1, author, comment, data)), database)
                 else:
                     if origPath:
                         if action == "renamed":
@@ -416,28 +476,41 @@ def translate_branch_name(name):
 
 
 # this is the function that prints most file data to the stream
-def print_blob_for_file(branch, fullPath, version=None):
+def print_blob_for_file(branch, fullPath, timestamp=None):
     global mark
+
+    time_struct = time.localtime(timestamp)
+    time_string = time.strftime("%Y%m%d%H:%M:59", time_struct)
 
     path, file = os.path.split(fullPath)
     localPath = os.path.join(scratchDir, file)
     if os.path.isfile(localPath):
         os.remove(localPath)
-    if version:
-        # get specified version
-        cmd = 'sscm get "%s" -b"%s" -p"%s" -d"%s" -f -i -v%d' % (file, branch, path, scratchDir, version)
+    if timestamp:
+        # get specified version. You would think the -v option would get the
+        # version of the file you want, but this does not work for deleted files.
+        # we need to use the time stamp with -s
+        cmd = sscm + ' get "%s" -b"%s" -p"%s" -d"%s" -f -i -s"%s" ' % (file, branch, path, scratchDir, time_string)
+        if username and password:
+            cmd = cmd + '-y"%s":"%s" ' % (username, password)
     else:
         # get newest version
-        cmd = 'sscm get "%s" -b"%s" -p"%s" -d"%s" -f -i' % (file, branch, path, scratchDir)
+        cmd = sscm + ' get "%s" -b"%s" -p"%s" -d"%s" -f -i ' % (file, branch, path, scratchDir)
+        if username and password:
+            cmd = cmd + '-y"%s":"%s" ' % (username, password)
     with open(os.devnull, 'w') as fnull:
         subprocess.Popen(cmd, shell=True, stdout=fnull, stderr=fnull).communicate()
 
+    # git fast-import is very particular about the format of the blob command.
+    # The data must be given in raw bytes for it to parse the files correctly.
     mark = mark + 1
-    print("blob")
-    print("mark :%d" % mark)
-    print("data %d" % os.path.getsize(localPath))
-    with open(localPath, "rb") as f:
-        print(f.read())
+    sys.stdout.buffer.write(b'blob\n')
+    sys.stdout.buffer.write(b'mark :%d\n' % mark)
+    line = open(localPath, 'rb').read()
+    sys.stdout.buffer.write(b'data %d\n' % len(line))
+    sys.stdout.buffer.write(line)
+    sys.stdout.buffer.write(b'\n')
+    sys.stdout.flush()
     return mark
 
 
@@ -515,7 +588,7 @@ def process_database_record(record):
         # this is the usual case
 
         if record.action == Actions.FILE_MODIFY:
-            blobMark = print_blob_for_file(record.branch, record.path, record.version)
+            blobMark = print_blob_for_file(record.branch, record.path, record.timestamp)
 
         mark = mark + 1
         print("commit refs/heads/%s" % translate_branch_name(record.branch))
@@ -548,6 +621,10 @@ def process_database_record(record):
     else:
         raise Exception("Unknown record action")
 
+    # Flush our buffer. We are going to print a lot, so this helps everything
+    # stay in the right order.
+    sys.stdout.flush()
+
 
 def get_next_database_record(database, c):
     if not c:
@@ -563,6 +640,9 @@ def get_next_database_record(database, c):
 def cmd_export(database):
     sys.stderr.write("\n[+] Beginning export phase...\n")
 
+    if not os.path.exists(scratchDir):
+        os.mkdir(scratchDir)
+
     count = 0
     c, record = get_next_database_record(database, None)
     count = count + 1
@@ -572,7 +652,7 @@ def cmd_export(database):
 
         count = count + 1
         # print progress every 10 operations
-        if count % 10 == 0:
+        if count % 10 == 0 and record:
             # just print the date we're currently servicing
             print("progress", time.strftime('%Y-%m-%d', time.localtime(record[0])))
 
@@ -598,13 +678,24 @@ def cmd_verify(mainline, path):
 def handle_command(parser):
     args = parser.parse_args()
 
+    if args.install:
+        global sscm
+        sscm = args.install[0]
+
+    if args.username and args.password:
+        global username
+        global password
+        username = args.username[0]
+        password = args.password[0]
+
     if args.command == "parse" and args.mainline and args.path:
         verify_surround_environment()
         database = create_database()
         cmd_parse(args.mainline[0], args.path[0], database)
     elif args.command == "export" and args.database:
         verify_surround_environment()
-        cmd_export(args.database[0])
+        database = sqlite3.connect(args.database[0])
+        cmd_export(database)
     elif args.command == "all" and args.mainline and args.path:
         # typical case
         verify_surround_environment()
@@ -626,6 +717,9 @@ def parse_arguments():
     parser.add_argument('-m', '--mainline', nargs=1, help='Mainline branch containing history to export')
     parser.add_argument('-p', '--path', nargs=1, help='Path containing history to export')
     parser.add_argument('-d', '--database', nargs=1, help='Path to local database (only used when resuming an export)')
+    parser.add_argument('-u', '--username', nargs=1, help='Username for the scm server')
+    parser.add_argument('-pw', '--password', nargs=1, help='Password for the scm server')
+    parser.add_argument('-i', '--install', nargs=1, help='Full path to sscm executable')
     parser.add_argument('--version', action='version', version='%(prog)s ' + VERSION)
     parser.add_argument('command', nargs='?', default='all')
     parser.epilog = "Example flow:\n\tsscm setclient ...\n\tgit init my-new-repo\n\tcd my-new-repo\n\texport-surround-to-git.py -m Sandbox -p \"Sandbox/Merge Test\" -f blah.txt | git fast-import --stats --export-marks=marks.txt\n\t...\n\tgit repack ..."
