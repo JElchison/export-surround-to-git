@@ -181,12 +181,11 @@ def get_lines_from_sscm_cmd(sscm_cmd):
 
 
 def find_all_branches_in_mainline_containing_path(mainline, path):
-    # pull out lines from `lsbranch` that are of type baseline, mainline, or snapshot.
-    # no sense in adding the `-d` switch, as `sscm ls` won't list anything for deleted branches.
+    # use the -o command on lsbranch to get a full path definition of each
+    # branch. This will help us parse later
     cmd = sscm + ' lsbranch -b"%s" -p"%s" -o ' % (mainline, path)
     if username and password:
         cmd = cmd + '-y"%s":"%s" ' % (username, password)
-    #cmd = cmd + '| sed -r \'s/ \((baseline|mainline|snapshot)\)$//g\' | grep \"%s>\"' % mainline
 
     # FTODO this command yields branches that don't include the path specified.
     # we can however filter out the branches by using the -o option to print
@@ -196,13 +195,15 @@ def find_all_branches_in_mainline_containing_path(mainline, path):
 
     our_branches = []
     # Parse the branches and find the branches in the path provided
-    # TODO might need to filter by baseline mainline and snapshot types too
+    # We can ignore snapshot branches here. Their parent branch will be found,
+    # and it has all snapshot branch information.
     for branch in branches:
-       if branch.startswith(path):
-           # Since the branch currently shows the full path we need to get the
-           # the branch name by getting only the last element in the path
-           match = re.search(r'\/([^\/]+)\s\<', branch)
-           our_branches.append(match.group(1))
+        if branch.startswith(path):
+            # Since the branch currently shows the full path we need to get the
+            # the branch name by getting only the last element in the path
+            match = re.search(r'\/([^\/]+)\s\<.+>\s\((baseline|mainline|snapshot)\)', branch)
+            if match.group(2) != 'snapshot':
+                our_branches.append(match.group(1))
 
     return our_branches
 
