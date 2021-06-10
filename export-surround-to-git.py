@@ -28,6 +28,7 @@
 
 # attempt to support both Python2.6+ and Python3
 from __future__ import print_function
+from enum import unique
 
 
 VERSION = '0.5.0'
@@ -95,7 +96,7 @@ class Actions:
 actionMap = {"add"                   : Actions.FILE_MODIFY,
              "add to repository"     : Actions.FILE_MODIFY,
              "add to branch"         : None,
-             "add from branch"       : Actions.FILE_MODIFY,
+             "add from branch"       : Actions.FILE_MODIFY, # This doesnt feel like a modify. TODO invesitgate
              "attach to issue"       : None,  # TODO maybe use lightweight Git tag to track this
              "attach to test case"   : None,  # TODO maybe use lightweight Git tag to track this
              "attach to requirement" : None,  # TODO maybe use lightweight Git tag to track this
@@ -148,6 +149,10 @@ class DatabaseRecord:
         self.author = author
         self.comment = comment
         self.data = data
+        self.blob_mark = None
+
+    def set_blob_mark(self, mark):
+        self.blob_mark = mark
 
     def get_tuple(self):
         return (self.timestamp, self.action, self.mainline, self.branch, self.path, self.origPath, self.version, self.author, self.comment, self.data)
@@ -514,127 +519,149 @@ def print_blob_for_file(branch, fullPath, timestamp=None):
     return mark
 
 
-def process_database_record(record):
+def process_database_record_group(c):
     global mark
 
-    if record.action == Actions.BRANCH_SNAPSHOT:
-        # the basic idea here is to use a "TAG_FIXUP" branch, as recommended in the manpage for git-fast-import.
-        # this is necessary since Surround version-controls individual files, and Git controls the state of the entire branch.
-        # the purpose of this commit it to bring the branch state to match the snapshot exactly.
+    # will contain a list of the MODIFY, DELETE, and RENAME records in this
+    # group to be processed later
+    normal_records = []
 
-        print("reset TAG_FIXUP")
-        print("from refs/heads/%s" % translate_branch_name(record.branch))
+    while r := c.fetchone():
+        record = DatabaseRecord(r)
 
-        # get all files contained within snapshot
-        files = find_all_files_in_branches_under_path(record.mainline, [record.data], record.path)
-        startMark = None
-        for file in files:
-            blobMark = print_blob_for_file(record.data, file)
-            if not startMark:
-                # keep track of what mark represents the start of this snapshot data
-                startMark = blobMark
+        if record.action == Actions.BRANCH_SNAPSHOT:
+            # the basic idea here is to use a "TAG_FIXUP" branch, as recommended in the manpage for git-fast-import.
+            # this is necessary since Surround version-controls individual files, and Git controls the state of the entire branch.
+            # the purpose of this commit it to bring the branch state to match the snapshot exactly.
 
-        mark = mark + 1
-        print("commit TAG_FIXUP")
-        print("mark :%d" % mark)
-        # we don't have the legit email addresses, so we just use the author as the email address
-        print("author %s <%s> %s %s" % (record.author, record.author, record.timestamp, timezone))
-        print("committer %s <%s> %s %s" % (record.author, record.author, record.timestamp, timezone))
-        if record.comment:
-            print("data %d" % len(record.comment))
-            print(record.comment)
-        else:
-            print("data 0")
+            print("reset TAG_FIXUP")
+            print("from refs/heads/%s" % translate_branch_name(record.branch))
 
-        # 'deleteall' tells Git to forget about previous branch state
-        print("deleteall")
-        # replay branch state from above-recorded marks
-        iterMark = startMark
-        for file in files:
-            print("M 100644 :%d %s" % (iterMark, file))
-            iterMark = iterMark + 1
-        if iterMark != mark:
-            raise Exception("Marks fell out of sync while tagging '%s'." % record.data)
+            # get all files contained within snapshot
+            files = find_all_files_in_branches_under_path(record.mainline, [record.data], record.path)
+            startMark = None
+            for file in files:
+                blobMark = print_blob_for_file(record.data, file)
+                if not startMark:
+                    # keep track of what mark represents the start of this snapshot data
+                    startMark = blobMark
 
-        # finally, tag our result
-        print("tag %s" % translate_branch_name(record.data))
-        print("from TAG_FIXUP")
-        print("tagger %s <%s> %s %s" % (record.author, record.author, record.timestamp, timezone))
-        if record.comment:
-            print("data %d" % len(record.comment))
-            print(record.comment)
-        else:
-            print("data 0")
-
-        # save off the mapping between the tag name and the tag mark
-        tagDict[translate_branch_name(record.data)] = mark
-
-    elif record.action == Actions.BRANCH_BASELINE:
-        # the idea hers is to simply 'reset' to create our new branch, the name of which is contained in the 'data' field
-
-        print("reset refs/heads/%s" % translate_branch_name(record.data))
-
-        parentBranch = translate_branch_name(record.branch)
-        if is_snapshot_branch(parentBranch, os.path.split(record.path)[0]):
-            # Git won't let us refer to the tag directly (maybe this will be fixed in a future version).
-            # for now, we have to refer to the associated tag mark instead.
-            # (if this is fixed in the future, we can get rid of tagDict altogether)
-            print("from :%d" % tagDict[parentBranch])
-        else:
-            # baseline branch
-            print("from refs/heads/%s" % parentBranch)
-
-    elif record.action == Actions.FILE_MODIFY or record.action == Actions.FILE_DELETE or record.action == Actions.FILE_RENAME:
-        # this is the usual case
-
-        if record.action == Actions.FILE_MODIFY:
-            blobMark = print_blob_for_file(record.branch, record.path, record.timestamp)
-
-        mark = mark + 1
-        print("commit refs/heads/%s" % translate_branch_name(record.branch))
-        print("mark :%d" % mark)
-        print("author %s <%s> %s %s" % (record.author, record.author, record.timestamp, timezone))
-        print("committer %s <%s> %s %s" % (record.author, record.author, record.timestamp, timezone))
-        if record.comment:
-            print("data %d" % len(record.comment))
-            print(record.comment)
-        else:
-            print("data 0")
-
-        if record.action == Actions.FILE_MODIFY:
-            if record.origPath:
-                # looks like there was a previous rename.  use the original name.
-                print("M 100644 :%d %s" % (blobMark, record.origPath))
+            mark = mark + 1
+            print("commit TAG_FIXUP")
+            print("mark :%d" % mark)
+            # we don't have the legit email addresses, so we just use the author as the email address
+            print("author %s <%s> %s %s" % (record.author, record.author, record.timestamp, timezone))
+            print("committer %s <%s> %s %s" % (record.author, record.author, record.timestamp, timezone))
+            if record.comment:
+                print("data %d" % len(record.comment))
+                print(record.comment)
             else:
-                # no previous rename.  good to use the current name.
-                print("M 100644 :%d %s" % (blobMark, record.path))
-        elif record.action == Actions.FILE_DELETE:
-            print("D %s" % record.path)
-        elif record.action == Actions.FILE_RENAME:
-            # NOTE we're not using record.path here, as there may have been multiple renames in the file's history
-            print("R %s %s" % (record.origPath, record.data))
+                print("data 0")
+
+            # 'deleteall' tells Git to forget about previous branch state
+            print("deleteall")
+            # replay branch state from above-recorded marks
+            iterMark = startMark
+            for file in files:
+                print("M 100644 :%d %s" % (iterMark, file))
+                iterMark = iterMark + 1
+            if iterMark != mark:
+                raise Exception("Marks fell out of sync while tagging '%s'." % record.data)
+
+            # finally, tag our result
+            print("tag %s" % translate_branch_name(record.data))
+            print("from TAG_FIXUP")
+            print("tagger %s <%s> %s %s" % (record.author, record.author, record.timestamp, timezone))
+            if record.comment:
+                print("data %d" % len(record.comment))
+                print(record.comment)
+            else:
+                print("data 0")
+
+            # save off the mapping between the tag name and the tag mark
+            tagDict[translate_branch_name(record.data)] = mark
+
+        elif record.action == Actions.BRANCH_BASELINE:
+            # the idea hers is to simply 'reset' to create our new branch, the name of which is contained in the 'data' field
+
+            print("reset refs/heads/%s" % translate_branch_name(record.data))
+
+            parentBranch = translate_branch_name(record.branch)
+            if is_snapshot_branch(parentBranch, os.path.split(record.path)[0]):
+                # Git won't let us refer to the tag directly (maybe this will be fixed in a future version).
+                # for now, we have to refer to the associated tag mark instead.
+                # (if this is fixed in the future, we can get rid of tagDict altogether)
+                print("from :%d" % tagDict[parentBranch])
+            else:
+                # baseline branch
+                print("from refs/heads/%s" % parentBranch)
+
+        elif record.action == Actions.FILE_MODIFY or record.action == Actions.FILE_DELETE or record.action == Actions.FILE_RENAME:
+            # this is the usual case
+            # We process these at the end as we need to loop through the list
+            # several times to get the print order right
+            normal_records.append(record)
+
         else:
-            # this is a branch operation
-            if record.data:
-                # record the other ancestor
-                print("merge refs/heads/%s" % translate_branch_name(record.data))
-    else:
-        raise Exception("Unknown record action")
+            raise Exception("Unknown record action")
 
-    # Flush our buffer. We are going to print a lot, so this helps everything
-    # stay in the right order.
-    sys.stdout.flush()
+        # Flush our buffer. We are going to print a lot, so this helps everything
+        # stay in the right order.
+        sys.stdout.flush()
 
+    # Here we are going to combine all the "normal records" into a single commit
+    if len(normal_records):
+        unique_comments = {}
 
-def get_next_database_record(database, c):
-    if not c:
-        c = database.cursor()
-        # TODO this is a temporary hack until we can get granularity of seconds in the timestamp field.
-        #      an alternative would be to topologically sort all items with the same timestamp,
-        #      such that parent branches are created before child branches.
-        #c.execute('''SELECT * FROM operations ORDER BY timestamp, version ASC''')
-        c.execute('''SELECT * FROM operations ORDER BY timestamp ASC''')
-    return c, c.fetchone()
+        for record in normal_records:
+            if record.action == Actions.FILE_MODIFY:
+                    blob_mark = print_blob_for_file(record.branch, record.path, record.timestamp)
+                    record.set_blob_mark(blob_mark)
+            if record.comment:
+                if record.comment not in unique_comments:
+                    unique_comments[record.comment] = []
+                unique_comments[record.comment].append(record.path)
+
+        mark = mark + 1
+        print("commit refs/heads/%s" % translate_branch_name(normal_records[0].branch))
+        print("mark :%d" % mark)
+        print("author %s <%s> %s %s" % (normal_records[0].author, normal_records[0].author, normal_records[0].timestamp, timezone))
+        print("committer %s <%s> %s %s" % (normal_records[0].author, normal_records[0].author, normal_records[0].timestamp, timezone))
+        if len(unique_comments):
+            full_comment = ""
+            for comment, files in unique_comments.items():
+                full_comment += (comment + "\n")
+                # If we're combining multiple comments lets tell the user which
+                # file(s) each comment is associated with
+                if len(unique_comments) > 1:
+                    full_comment += "Above comment references the following files:\n"
+                    for file in files:
+                        full_comment += "- %s\n" % file
+                    full_comment += "\n"
+            print("data %d" % len(full_comment))
+            print(full_comment)
+        else:
+            print("data 0")
+
+        for record in normal_records:
+            if record.action == Actions.FILE_MODIFY:
+                if record.origPath and record.origPath != "NULL":
+                    # looks like there was a previous rename.  use the original name.
+                    print("M 100644 :%d %s" % (record.blob_mark, record.origPath))
+                else:
+                    # no previous rename.  good to use the current name.
+                    print("M 100644 :%d %s" % (record.blob_mark, record.path))
+            elif record.action == Actions.FILE_DELETE:
+                print("D %s" % record.path)
+            elif record.action == Actions.FILE_RENAME:
+                # NOTE we're not using record.path here, as there may have been multiple renames in the file's history
+                print("R %s %s" % (record.origPath, record.data))
+            else:
+                raise Exception("Unknown record action")
+
+        # Flush our buffer. We are going to print a lot, so this helps everything
+        # stay in the right order.
+        sys.stdout.flush()
 
 
 def cmd_export(database):
@@ -643,16 +670,23 @@ def cmd_export(database):
     if not os.path.exists(scratchDir):
         os.mkdir(scratchDir)
 
-    count = 0
-    c, record = get_next_database_record(database, None)
-    count = count + 1
-    while (record):
-        process_database_record(DatabaseRecord(record))
-        c, record = get_next_database_record(database, c)
+    # Group the database by timestamp, branch and author. This will allow us to find
+    # each unique timestamp for each branch (multiple branches can have
+    # actions performed at the same time, and a checking aught to have only one author).
+    # We want to then go through each operation in these groups as we will group
+    # all Surround actions in these timestamps as a single commit
+    c1 = database.cursor()
+    c2 = database.cursor()
+    c1.execute('''SELECT timestamp, branch FROM operations GROUP BY timestamp, branch, author ORDER BY timestamp ASC''')
 
+    count = 0
+    records_group = []
+    while record := c1.fetchone():
+        c2.execute("SELECT * FROM operations WHERE timestamp == %d AND branch == '%s' ORDER BY action ASC" % (record[0], record[1]))
+        process_database_record_group(c2)
         count = count + 1
-        # print progress every 10 operations
-        if count % 10 == 0 and record:
+        # print progress every 5 operations
+        if count % 5 == 0 and record:
             # just print the date we're currently servicing
             print("progress", time.strftime('%Y-%m-%d', time.localtime(record[0])))
 
